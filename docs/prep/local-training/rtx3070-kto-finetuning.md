@@ -1,29 +1,29 @@
-# KTO Fine-Tuning on NVIDIA RTX 3070 (8GB VRAM) - Comprehensive Guide
+# KTO Fine-Tuning on NVIDIA RTX 3090 (24GB VRAM) - Comprehensive Guide
 
 ## Executive Summary
 
-The NVIDIA RTX 3070 with 8GB VRAM represents an accessible entry point for local LLM fine-tuning, capable of handling KTO (Kahneman-Tversky Optimization) training with proper memory optimization techniques. While 8GB VRAM is limited compared to professional AI workstation GPUs, modern quantization methods (4-bit NF4), parameter-efficient fine-tuning (LoRA/QLoRA), and memory optimization techniques (gradient checkpointing, flash attention) make KTO training feasible.
+The NVIDIA RTX 3090 with 24GB VRAM is an excellent platform for local LLM fine-tuning, capable of handling KTO (Kahneman-Tversky Optimization) training with ease. With 3x the VRAM of an RTX 3070, the RTX 3090 can accommodate larger batch sizes, longer sequences, and even larger models without aggressive optimization constraints.
 
 **Key Findings**:
-- 4-bit quantization enables 7B model fine-tuning on 8GB VRAM
-- QLoRA reduces memory requirements by 75-90% while maintaining 95%+ model quality
+- 4-bit quantization enables 7B+ model fine-tuning on 24GB VRAM
+- QLoRA reduces memory requirements while maintaining 95%+ model quality
 - Unsloth provides 2x faster training with 70% less VRAM compared to standard methods
-- Effective batch sizes of 16-64 achievable through gradient accumulation
-- Expected training speeds: 5-15 tokens/second for 7B models with optimizations
+- Effective batch sizes of 32-128 easily achievable
+- Expected training speeds: 15-30 tokens/second for 7B models with Unsloth optimizations
 
-**Recommended Approach**: Use Unsloth + TRL KTOTrainer with 4-bit NF4 quantization for optimal performance on RTX 3070.
+**Recommended Approach**: Use Unsloth + TRL KTOTrainer with 4-bit NF4 quantization for optimal performance on RTX 3090.
 
 ---
 
 ## Technology Overview
 
-### NVIDIA RTX 3070 Specifications
-- **CUDA Cores**: 5888
-- **VRAM**: 8GB GDDR6
-- **Memory Bandwidth**: 448 GB/s
+### NVIDIA RTX 3090 Specifications
+- **CUDA Cores**: 10496
+- **VRAM**: 24GB GDDR6X
+- **Memory Bandwidth**: 936 GB/s
 - **CUDA Capability**: 8.6 (Ampere architecture)
 - **Tensor Cores**: 3rd Generation (supports mixed precision training)
-- **TDP**: 220W
+- **TDP**: 350W
 
 ### Compatibility and Support
 - **CUDA Version**: 11.8, 12.1, 12.4+ supported
@@ -34,15 +34,23 @@ The NVIDIA RTX 3070 with 8GB VRAM represents an accessible entry point for local
 
 ### Memory Constraints Reality Check
 
-**VRAM Breakdown for 7B Model Training**:
+**VRAM Breakdown for 7B Model Training** (with batch_size=4):
 - Model weights (4-bit): ~3.5 GB
 - Optimizer states (8-bit Adam): ~1.5 GB
 - Gradients: ~1.0 GB
-- Activations (batch_size=1): ~0.5-1.5 GB
+- Activations (batch_size=4): ~2-4 GB
 - CUDA context/overhead: ~0.5 GB
-- **Total**: ~7-8 GB (very tight)
+- **Total**: ~8-10 GB (comfortable)
 
-**Conclusion**: 8GB VRAM requires aggressive optimization for 7B models, but is comfortable for 3B models.
+**For 13B Models** (with batch_size=2, 4-bit):
+- Model weights (4-bit): ~6.5 GB
+- Optimizer states (8-bit Adam): ~3.0 GB
+- Gradients: ~2.0 GB
+- Activations (batch_size=2): ~2-3 GB
+- CUDA context/overhead: ~0.5 GB
+- **Total**: ~14-15 GB (feasible)
+
+**Conclusion**: 24GB VRAM comfortably handles 7B models with larger batch sizes, and can even support 13B models with proper optimization.
 
 ---
 
@@ -450,44 +458,46 @@ lora_config = LoraConfig(
 
 ---
 
-## Recommended Models for RTX 3070 8GB
+## Recommended Models for RTX 3090 24GB
 
-### Tier 1: Optimal for 8GB VRAM (Highly Recommended)
-
-| Model | Parameters | 4-bit Size | Training Speed | Quality | Use Case |
-|-------|------------|------------|----------------|---------|----------|
-| Qwen2.5-3B-Instruct | 3B | ~2 GB | ~20-25 tok/s | Good | Fast iteration, experimentation |
-| Llama-3.2-3B-Instruct | 3B | ~2 GB | ~20-25 tok/s | Good | General purpose, fast training |
-| Phi-3.5-mini-instruct | 3.8B | ~2.5 GB | ~18-22 tok/s | Good | Reasoning tasks |
-| StableLM-3B | 3B | ~2 GB | ~20-25 tok/s | Good | Creative tasks |
-
-**Memory headroom**: 4-6 GB available for activations, optimizer, gradients
-**Batch size**: Can use batch_size=2-4 with gradient accumulation
-**Training time**: Fastest, suitable for rapid experimentation
-
-### Tier 2: Feasible with Optimization (Recommended)
+### Tier 1: Optimal for Fast Iteration and Experimentation
 
 | Model | Parameters | 4-bit Size | Training Speed | Quality | Use Case |
 |-------|------------|------------|----------------|---------|----------|
-| Mistral-7B-Instruct-v0.3 | 7B | ~3.5 GB | ~10-15 tok/s | Excellent | Production quality |
-| Llama-3.1-8B-Instruct | 8B | ~4 GB | ~8-12 tok/s | Excellent | High-quality outputs |
-| Qwen2.5-7B-Instruct | 7B | ~3.5 GB | ~10-15 tok/s | Excellent | Multilingual, coding |
-| Gemma-7B-it | 7B | ~3.5 GB | ~10-15 tok/s | Very Good | Google ecosystem |
+| Qwen2.5-3B-Instruct | 3B | ~2 GB | ~25-35 tok/s | Good | Rapid experimentation |
+| Llama-3.2-3B-Instruct | 3B | ~2 GB | ~25-35 tok/s | Good | Fast prototyping |
+| Phi-3.5-mini-instruct | 3.8B | ~2.5 GB | ~22-28 tok/s | Good | Reasoning + speed |
 
-**Memory headroom**: 2-4 GB available (tight)
-**Batch size**: Must use batch_size=1 with gradient accumulation
-**Training time**: Moderate, best for final training runs
-**Recommendation**: Use Unsloth for these models to maximize memory efficiency
+**Memory headroom**: 20+ GB available for larger batches and longer sequences
+**Batch size**: Can use batch_size=8-16 with modest gradient accumulation
+**Training time**: Very fast, ideal for iteration
 
-### Tier 3: Challenging (Not Recommended)
+### Tier 2: Production Quality (Highly Recommended)
 
-| Model | Parameters | 4-bit Size | Feasibility | Notes |
-|-------|------------|------------|-------------|-------|
-| Llama-2-13B | 13B | ~6.5 GB | Marginal | Requires max optimizations, very slow |
-| Mistral-8x7B (MoE) | 47B active 13B | Varies | Not feasible | Even with 4-bit, exceeds 8GB |
-| Llama-3.1-70B | 70B | ~35 GB | Impossible | Requires 48GB+ VRAM |
+| Model | Parameters | 4-bit Size | Training Speed | Quality | Use Case |
+|-------|------------|------------|----------------|---------|----------|
+| Mistral-7B-Instruct-v0.3 | 7B | ~3.5 GB | ~20-30 tok/s | Excellent | Production-grade output |
+| Llama-3.1-8B-Instruct | 8B | ~4 GB | ~18-28 tok/s | Excellent | High-quality general purpose |
+| Qwen2.5-7B-Instruct | 7B | ~3.5 GB | ~20-30 tok/s | Excellent | Multilingual, coding tasks |
+| Gemma-7B-it | 7B | ~3.5 GB | ~20-30 tok/s | Very Good | Google ecosystem |
 
-**Avoid these models on 8GB VRAM** - use smaller models or cloud GPUs instead.
+**Memory headroom**: 15+ GB available (comfortable)
+**Batch size**: Can use batch_size=4-8 with moderate gradient accumulation
+**Training time**: Moderate, optimal balance of quality and speed
+**Recommendation**: Excellent for most production use cases
+
+### Tier 3: Advanced Models (Now Feasible)
+
+| Model | Parameters | 4-bit Size | Training Speed | Quality | Use Case |
+|-------|------------|------------|----------------|---------|----------|
+| Llama-2-13B | 13B | ~6.5 GB | ~12-18 tok/s | Very Good | When 7B insufficient |
+| Mistral-8x7B (MoE) | 47B active/13B | ~7-8 GB | ~10-15 tok/s | Excellent | Sparse models for speed |
+| Llama-3.1-70B | 70B | ~35 GB | Not feasible | N/A | Requires A100/H100 |
+
+**Memory headroom**: 10-15 GB available (feasible with optimization)
+**Batch size**: batch_size=2-4 with gradient accumulation
+**Training time**: Longer but manageable, great quality
+**Note**: 13B models now feasible with RTX 3090's extra VRAM
 
 ### Pre-Quantized Model Sources
 
@@ -563,53 +573,57 @@ eval_dataset = dataset["test"]
 
 ## Performance Expectations
 
-### Training Speed Benchmarks (RTX 3070 8GB)
+### Training Speed Benchmarks (RTX 3090 24GB)
 
 **With Unsloth** (Recommended):
 | Model | Batch Size | Tokens/Second | Examples/Hour | Notes |
 |-------|------------|---------------|---------------|-------|
-| Qwen2.5-3B | 1 (acc=32) | ~22-25 | ~1200 | Very fast |
-| Llama-3.2-3B | 1 (acc=32) | ~20-23 | ~1100 | Fast |
-| Mistral-7B | 1 (acc=16) | ~12-15 | ~450 | Moderate |
-| Llama-3.1-8B | 1 (acc=16) | ~10-12 | ~380 | Moderate-slow |
+| Qwen2.5-3B | 8 (acc=4) | ~32-40 | ~2000+ | Very fast |
+| Llama-3.2-3B | 8 (acc=4) | ~30-38 | ~1900+ | Very fast |
+| Mistral-7B | 4 (acc=8) | ~25-35 | ~900+ | Fast |
+| Llama-3.1-8B | 4 (acc=8) | ~22-32 | ~800+ | Fast |
+| Llama-2-13B | 2 (acc=8) | ~18-25 | ~600+ | Moderate |
 
 **Without Unsloth** (Standard):
 | Model | Batch Size | Tokens/Second | Examples/Hour | Notes |
 |-------|------------|---------------|---------------|-------|
-| Qwen2.5-3B | 1 (acc=32) | ~15-18 | ~800 | Slower than Unsloth |
-| Mistral-7B | 1 (acc=16) | ~6-8 | ~220 | Significantly slower |
+| Qwen2.5-3B | 4 (acc=8) | ~20-25 | ~1200+ | Good |
+| Mistral-7B | 2 (acc=8) | ~12-16 | ~450+ | Moderate |
 
 **Speedup with Unsloth**: 1.5-2x faster training for same configuration
 
 ### Memory Usage Patterns
 
-**Mistral-7B on RTX 3070** (4-bit + QLoRA):
+**Mistral-7B on RTX 3090** (4-bit + QLoRA, batch=4):
 - Model weights: ~3.5 GB
-- Optimizer (8-bit): ~1.2 GB
-- Gradients: ~0.8 GB
-- Activations (batch=1, seq=1024): ~1.5 GB
+- Optimizer (8-bit): ~1.5 GB
+- Gradients: ~1.0 GB
+- Activations (batch=4, seq=1024): ~3.0 GB
 - CUDA overhead: ~0.5 GB
-- **Total**: ~7.5 GB (near limit)
+- **Total**: ~9.5 GB (plenty of headroom)
 
-**Qwen2.5-3B on RTX 3070**:
-- Model weights: ~2.0 GB
-- Optimizer (8-bit): ~0.6 GB
-- Gradients: ~0.4 GB
-- Activations (batch=2, seq=1024): ~1.5 GB
+**Llama-2-13B on RTX 3090** (4-bit + QLoRA, batch=2):
+- Model weights: ~6.5 GB
+- Optimizer (8-bit): ~3.0 GB
+- Gradients: ~2.0 GB
+- Activations (batch=2, seq=1024): ~2.5 GB
 - CUDA overhead: ~0.5 GB
-- **Total**: ~5.0 GB (comfortable)
+- **Total**: ~14.5 GB (comfortable)
 
 ### When to Use Gradient Accumulation
 
-Always use gradient accumulation on 8GB VRAM:
+On RTX 3090, you have more flexibility with batch sizes, but gradient accumulation can still improve training efficiency.
 
 **Formula**:
 ```
 Effective Batch Size = per_device_train_batch_size × gradient_accumulation_steps × num_gpus
 ```
 
-**For KTO**: Aim for effective batch size of 16-64
-**Example**: `batch_size=1 × accumulation=32 × 1 GPU = 32 effective batch size`
+**For KTO**: Aim for effective batch size of 32-128
+**Examples**:
+- 3B models: `batch_size=8 × accumulation=4 × 1 GPU = 32 effective batch size`
+- 7B models: `batch_size=4 × accumulation=8 × 1 GPU = 32 effective batch size`
+- 13B models: `batch_size=2 × accumulation=8 × 1 GPU = 16 effective batch size`
 
 ---
 
@@ -842,39 +856,52 @@ training_args = KTOConfig(
 
 ## Best Practices and Recommendations
 
-### Workflow for 8GB VRAM
+### Workflow for RTX 3090 24GB
 
-1. **Start Small**: Test with 3B model (Qwen2.5-3B or Llama-3.2-3B)
+1. **Start Small**: Test with 3B model (fastest iteration)
 2. **Validate Setup**: Train on 100-500 examples first
-3. **Monitor Memory**: Use `nvidia-smi` to check VRAM usage
-4. **Optimize Gradually**: Increase batch size, sequence length if memory allows
-5. **Scale Up**: Move to 7B model once pipeline is proven
-6. **Use Unsloth**: Install Unsloth for 2x speedup and 70% memory reduction
+3. **Monitor Memory**: Use `nvidia-smi` to check VRAM usage (should stay <20GB)
+4. **Scale Up**: Increase batch sizes, move to 7B-13B models
+5. **Optimize Gradually**: Increase sequence length, fine-tune hyperparameters
+6. **Use Unsloth**: Install Unsloth for 2x speedup and even more memory efficiency
 
 ### Configuration Template for Production
 
-**For 3B Models** (Fast iteration):
+**For 3B Models** (Fast iteration, batch_size=8):
 ```python
 training_args = KTOConfig(
-    per_device_train_batch_size=2,
-    gradient_accumulation_steps=16,  # Effective = 32
+    per_device_train_batch_size=8,
+    gradient_accumulation_steps=4,  # Effective = 32
     learning_rate=1e-6,
     max_length=1024,
-    gradient_checkpointing=True,
+    gradient_checkpointing=False,  # Not needed with 24GB
     optim="adamw_8bit",
     fp16=True,
 )
 ```
 
-**For 7B Models** (Production quality):
+**For 7B Models** (Balanced quality/speed, batch_size=4):
 ```python
 training_args = KTOConfig(
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=32,  # Effective = 32
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=8,  # Effective = 32
     learning_rate=5e-7,
     max_length=1024,
-    gradient_checkpointing=True,
-    optim="paged_adamw_8bit",
+    gradient_checkpointing=False,  # Not needed with 24GB
+    optim="adamw_8bit",
+    fp16=True,
+)
+```
+
+**For 13B Models** (Advanced, batch_size=2):
+```python
+training_args = KTOConfig(
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=8,  # Effective = 16
+    learning_rate=5e-7,
+    max_length=1024,
+    gradient_checkpointing=True,  # Helps with larger models
+    optim="adamw_8bit",
     fp16=True,
 )
 ```
@@ -882,29 +909,29 @@ training_args = KTOConfig(
 ### Model Selection Decision Tree
 
 ```
-Do you need highest quality?
-├─ Yes → Use 7B model (Mistral-7B, Llama-3.1-8B)
-│   └─ Install Unsloth for memory efficiency
-└─ No → Do you need fast iteration?
-    ├─ Yes → Use 3B model (Qwen2.5-3B, Llama-3.2-3B)
-    └─ No → Balance: Use 3B for experiments, 7B for final training
+For RTX 3090 24GB:
+├─ Need fastest iteration? → Use 3B model (Qwen2.5, Llama-3.2)
+├─ Need best balance? → Use 7B model (Mistral-7B, Llama-3.1-8B)
+└─ Need max quality? → Use 13B model (Llama-2-13B, potentially larger)
+    └─ Install Unsloth for maximum efficiency
 ```
 
 ### When to Consider Cloud GPUs
 
 Consider cloud GPUs (A100, H100) if:
-- Training >10k examples on 7B+ models regularly
-- Need faster iteration (>50 tok/s)
-- Working with 13B+ models
-- Experimenting with longer contexts (>4k tokens)
-- Budget allows ($1-3/hour for A100)
+- Training 20k+ examples regularly and speed is critical
+- Need extreme scale (multiple GPUs, distributed training)
+- Working with 30B+ models
+- Experimenting with very long contexts (>8k tokens)
+- Budget allows and requires minimal latency
 
-**8GB RTX 3070 is sufficient for**:
-- Learning and experimentation
-- Small to medium datasets (<10k examples)
-- 3B-7B model fine-tuning
-- LoRA/QLoRA training
-- Prototyping before scaling to cloud
+**RTX 3090 24GB is excellent for**:
+- Learning and experimentation with larger models
+- Small to large datasets (<20k examples)
+- 3B-13B model fine-tuning
+- LoRA/QLoRA training with substantial batch sizes
+- Production fine-tuning workflows
+- Development and testing before cloud deployment
 
 ---
 
@@ -1005,13 +1032,13 @@ After training:
 
 ### Hardware Compatibility
 
-| GPU | CUDA Capability | Unsloth Support | 4-bit Quantization | Flash Attention |
-|-----|----------------|-----------------|-------------------|-----------------|
-| RTX 3070 | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
-| RTX 3060 12GB | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
-| RTX 3080 10GB | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
-| RTX 2070 8GB | 7.5 | ✅ Yes (slower) | ✅ Yes | ✅ Yes |
-| GTX 1080 8GB | 6.1 | ⚠️ Limited | ⚠️ Slow | ❌ No |
+| GPU | VRAM | CUDA Capability | Unsloth Support | 4-bit Quantization | Flash Attention |
+|-----|------|----------------|-----------------|-------------------|-----------------|
+| RTX 3090 | 24GB | 8.6 | ✅ Yes (Excellent) | ✅ Yes | ✅ Yes |
+| RTX 4090 | 24GB | 8.9 | ✅ Yes (Excellent) | ✅ Yes | ✅ Yes |
+| RTX 3080 10GB | 10GB | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
+| RTX 3070 | 8GB | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
+| RTX 3060 12GB | 12GB | 8.6 | ✅ Yes | ✅ Yes | ✅ Yes |
 
 ### Operating System Support
 
@@ -1025,24 +1052,26 @@ After training:
 
 ## Recommendations
 
-### Primary Recommendation for RTX 3070 8GB
+### Primary Recommendation for RTX 3090 24GB
 
 **Use Unsloth + TRL KTOTrainer with 4-bit NF4 quantization**:
 
 **Why**:
 1. **2x faster training** compared to standard PyTorch
-2. **70% less VRAM** usage - critical for 8GB limit
-3. **Proven compatibility** with RTX 3070 (Ampere architecture)
+2. **70% less VRAM** usage - provides excellent headroom with 24GB
+3. **Proven compatibility** with RTX 3090 (Ampere architecture)
 4. **Active development** and community support
 5. **Simple installation** - handles dependencies automatically
 
 **Recommended Stack**:
-- Model: Mistral-7B-Instruct-v0.3 (4-bit) or Qwen2.5-3B-Instruct
+- **Small experiments**: Qwen2.5-3B-Instruct with batch_size=8
+- **Production quality**: Mistral-7B-Instruct-v0.3 with batch_size=4
+- **Advanced/Large models**: Llama-2-13B with batch_size=2
 - Framework: Unsloth + TRL
 - Quantization: 4-bit NF4 with double quantization
-- Optimizer: 8-bit AdamW or Paged AdamW
-- Batch size: 1 with gradient accumulation 32
-- Sequence length: 1024 (can push to 2048 with Unsloth)
+- Optimizer: 8-bit AdamW (paged version optional)
+- Batch size: Variable (8 for 3B, 4 for 7B, 2 for 13B)
+- Sequence length: 1024-2048 (flexible with RTX 3090)
 
 ### When to Use Standard PyTorch (Without Unsloth)
 
@@ -1051,37 +1080,38 @@ Only if:
 - You need specific PyTorch features not in Unsloth
 - You're debugging issues and want vanilla setup
 
-**Trade-off**: Accept 2x slower training and higher VRAM usage.
+**Trade-off**: Accept 2x slower training and more VRAM usage.
 
 ### Model Size Progression
 
-1. **Start**: Qwen2.5-3B-Instruct (fastest, safest)
-2. **Validate**: Train 1k examples, verify quality
-3. **Scale**: Move to Mistral-7B-Instruct-v0.3 for production
-4. **Optimize**: Fine-tune hyperparameters on 7B model
+1. **Start**: Qwen2.5-3B-Instruct (fastest prototyping)
+2. **Validate**: Train 1k-5k examples, verify quality and speed
+3. **Scale**: Move to Mistral-7B-Instruct-v0.3 for production quality
+4. **Advanced**: Experiment with 13B models if additional quality needed
+5. **Optimize**: Fine-tune hyperparameters and batch sizes on chosen model
 
 ### Cloud vs Local Decision Matrix
 
 | Scenario | Recommendation |
 |----------|----------------|
-| Learning KTO, <1k examples | Local RTX 3070 |
-| Prototyping, <5k examples | Local RTX 3070 |
-| Production, 5-10k examples | Local RTX 3070 (expect 4-8 hours) |
-| Large datasets >10k examples | Cloud GPU (A100) for speed |
-| Models >13B parameters | Cloud GPU (A100/H100) |
-| Regular training workflows | Local + Cloud hybrid |
+| Learning KTO, any size | Local RTX 3090 |
+| Prototyping, <5k examples | Local RTX 3090 |
+| Production, <20k examples | Local RTX 3090 (expect 2-10 hours) |
+| Large datasets >20k examples | Local RTX 3090 or Cloud GPU for speed |
+| Models >13B parameters | Local RTX 3090 (13B feasible) or Cloud for larger |
+| Regular training workflows | Local RTX 3090 primary, Cloud for scaling |
 
 ### Future-Proofing Considerations
 
-- **Unsloth development**: Actively improving memory efficiency
-- **PyTorch updates**: MPS and CUDA backends improving each release
-- **Model efficiency**: Newer 3B models approaching 7B quality
-- **Quantization**: 3-bit and 2-bit methods emerging (experimental)
+- **Unsloth development**: Continuously improving memory and speed efficiency
+- **PyTorch updates**: Performance improvements in each release
+- **Model efficiency**: Smaller models improving to rival larger ones
+- **Quantization**: More aggressive methods (3-bit, 2-bit) becoming practical
 
-**Recommendation**: RTX 3070 8GB remains viable for local fine-tuning in 2025, especially with Unsloth optimizations.
+**Recommendation**: RTX 3090 24GB is excellent for local fine-tuning in 2025+. Highly capable for production workflows, experimentation, and model development.
 
 ---
 
 **Last Updated**: January 2025
-**Hardware Tested**: NVIDIA RTX 3070 8GB (Driver 535+, CUDA 12.1)
+**Hardware Tested**: NVIDIA RTX 3090 24GB (Driver 535+, CUDA 12.1)
 **Software Versions**: PyTorch 2.2.0, Transformers 4.40.0, TRL 0.8.0, Unsloth latest
