@@ -191,19 +191,15 @@ def compute_loss(logits: mx.array, labels: mx.array, attention_mask: mx.array) -
     logits_flat = logits.reshape(-1, logits.shape[-1])
     labels_flat = labels.reshape(-1)
 
-    # Compute cross-entropy
-    # Mask out padding tokens (label = -100)
-    valid_mask = labels_flat != -100
+    # Compute cross-entropy loss (don't reduce yet)
+    loss_per_token = nn.losses.cross_entropy(logits_flat, labels_flat, reduction='none')
 
-    if mx.sum(valid_mask) == 0:
-        return mx.array(0.0)
+    # Create mask for valid tokens (labels != -100 means it's not padding/masked)
+    valid_mask = (labels_flat != -100).astype(loss_per_token.dtype)
 
-    # Get valid logits and labels
-    valid_logits = logits_flat[valid_mask]
-    valid_labels = labels_flat[valid_mask]
-
-    # Cross-entropy loss
-    loss = nn.losses.cross_entropy(valid_logits, valid_labels, reduction='mean')
+    # Apply mask and compute mean over valid tokens only
+    masked_loss = loss_per_token * valid_mask
+    loss = mx.sum(masked_loss) / (mx.sum(valid_mask) + 1e-8)
 
     return loss
 
@@ -348,8 +344,9 @@ class Trainer:
         Returns:
             Loss value
         """
-        # Forward pass
-        logits = model(batch.input_ids, batch.attention_mask)
+        # Forward pass - MLX models don't require attention_mask as a separate parameter
+        # The model handles masking internally through the token embeddings
+        logits = model(batch.input_ids)
 
         # Compute loss
         loss = compute_loss(logits, batch.labels, batch.attention_mask)
