@@ -2,18 +2,18 @@ import json
 import subprocess
 
 # Line number where we want to insert (between two False examples)
-line_number = 645  # Change this for each insertion
+line_number = 1113  # Change this for each insertion
 
 # The True example to insert (edit this for each insertion)
 new_example = {
     "conversations": [
         {
             "role": "user", 
-            "content": "Move the Reports/2023 folder into Archive/Old-Reports"
+            "content": "Update my current session to remind me to review the API documentation tomorrow"
         },
         {
             "role": "assistant", 
-            "content": 'tool_call: vaultManager_moveFolder\narguments: {"context": {"sessionId": "session_1731034646464_s3t4u5v6w", "workspaceId": "ws_1731034646464_x7y8z9a0b", "sessionDescription": "Archive old reports", "sessionMemory": "", "toolContext": "User archiving 2023 reports folder", "primaryGoal": "Move folder", "subgoal": "Relocate directory"}, "path": "Reports/2023", "newPath": "Archive/Old-Reports/2023"}\n\nResult: {"success": true, "message": "Moved folder Reports/2023 to Archive/Old-Reports/2023"}\n\nI\'ve moved the Reports/2023 folder to Archive/Old-Reports/2023.'
+            "content": 'tool_call: memoryManager_updateSession\narguments: {"context": {"sessionId": "session_1731034646464_c7d8e9f0g", "workspaceId": "ws_1731034646464_m9n0p1q2r", "sessionDescription": "Task scheduling", "sessionMemory": "User scheduling reminder for tomorrow to review API documentation", "toolContext": "memoryManager: User updating current session with scheduled task reminder", "primaryGoal": "Schedule reminder", "subgoal": "Update session with API review reminder"}, "sessionId": "session_1731034646464_c7d8e9f0g", "memory": "TODO: Review API documentation tomorrow"}\n\nResult: {"success": true, "message": "Updated session with reminder"}\n\nI have updated your session with a reminder to review the API documentation tomorrow.'
         }
     ],
     "label": True
