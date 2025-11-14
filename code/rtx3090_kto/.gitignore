@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Training outputs
+kto_output*/
+*.ckpt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+final_model/
+test_output/
+my_model/
+
+# GGUF outputs
+gguf_output/
+merged_model/
+*.gguf
+llama.cpp/
+
+# Datasets
+*.jsonl
+!examples/sample_dataset.jsonl
+
+# Logs
+*.log
+wandb/
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# HuggingFace
+.huggingface/
+hf_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Misc
+*.bak
+*.tmp
+.env
