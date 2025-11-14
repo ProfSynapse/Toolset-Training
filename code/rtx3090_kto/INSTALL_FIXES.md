@@ -7,7 +7,13 @@ This document describes the fixes applied to ensure reliable installation of the
 
 ### 1. requirements.txt Updates
 
-**Critical Fixes:**
+**CRITICAL FIX - PyPI Package Access:**
+- **Line 9**: Changed `--index-url` → `--extra-index-url`
+- **Problem**: `--index-url` restricts pip to ONLY PyTorch repository, preventing it from finding transformers, datasets, etc. from PyPI
+- **Solution**: `--extra-index-url` allows pip to search both PyPI (default) AND PyTorch repository
+- **Impact**: Without this fix, `pip install -r requirements.txt` fails with "Could not find a version that satisfies the requirement transformers==4.45.2"
+
+**Critical Version Fixes:**
 - `datasets`: Changed from `2.14.0` → `2.16.1` (fixes pyarrow compatibility)
 - `peft`: Changed from `0.7.0` → `0.7.1` (required by Unsloth 2024.9)
 - `huggingface-hub`: Pinned to `==0.25.0` (CRITICAL - newer versions break Unsloth)
@@ -18,6 +24,8 @@ tokenizers>=0.20,<0.21       # Required version range for transformers 4.45.2
 fsspec[http]>=2023.1.0,<=2023.10.0  # datasets 2.16.1 compatibility
 pyarrow>=14.0.0               # datasets backend
 pyarrow_hotfix                # security fixes for pyarrow
+sentencepiece>=0.1.99         # Required for tokenizer (was missing!)
+protobuf<4.0.0                # Required by Unsloth (was missing!)
 ```
 
 ### 2. setup.sh Updates
