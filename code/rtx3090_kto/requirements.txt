@@ -6,7 +6,7 @@
 # Unsloth requires special installation - see setup.sh
 
 # PyTorch with CUDA 12.1 support (stable for RTX 3090)
---index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu121
 torch==2.4.1
 torchvision==0.19.1
 torchaudio==2.4.1
@@ -37,6 +37,8 @@ tokenizers>=0.20,<0.21
 fsspec[http]>=2023.1.0,<=2023.10.0
 pyarrow>=14.0.0
 pyarrow_hotfix
+sentencepiece>=0.1.99  # Required for tokenizer
+protobuf<4.0.0  # Required by Unsloth
 
 # Optional: Weights & Biases
 # wandb>=0.16.0

@@ -65,26 +65,37 @@ else
     echo "✓ GPU detected"
 fi
 
-# Create virtual environment
-echo -e "\n[3/8] Creating virtual environment..."
+# Create conda environment with Python 3.10
+echo -e "\n[3/8] Creating conda environment with Python 3.10..."
+
+# Check if conda is available
+if ! command -v conda &> /dev/null; then
+    echo "ERROR: conda not found. Please install Miniconda or Anaconda."
+    echo "Download from: https://docs.conda.io/en/latest/miniconda.html"
+    exit 1
+fi
+
+# Source conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null || true
+
 if [ -d "venv" ]; then
     echo "Virtual environment already exists"
     read -p "Recreate it? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         rm -rf venv
-        python3 -m venv venv
-        echo "✓ Virtual environment recreated"
+        conda create -y -p ./venv python=3.10
+        echo "✓ Conda environment recreated with Python 3.10"
     fi
 else
-    python3 -m venv venv
-    echo "✓ Virtual environment created"
+    conda create -y -p ./venv python=3.10
+    echo "✓ Conda environment created with Python 3.10"
 fi
 
-# Activate virtual environment
-echo -e "\n[4/8] Activating virtual environment..."
-source venv/bin/activate
-echo "✓ Virtual environment activated"
+# Activate conda environment
+echo -e "\n[4/8] Activating conda environment..."
+conda activate ./venv
+echo "✓ Conda environment activated (Python $(python --version 2>&1 | awk '{print $2}'))"
 
 # Upgrade pip
 echo -e "\n[5/8] Upgrading pip, setuptools, wheel..."

@@ -29,7 +29,9 @@
       "Bash(=0.20.0 psutil safetensors regex requests packaging pyyaml)",
       "Bash(=0.20.0 psutil safetensors regex requests packaging pyyaml -q)",
       "Bash(python train_kto.py:*)",
-      "Bash(conda env list:*)"
+      "Bash(conda env list:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
