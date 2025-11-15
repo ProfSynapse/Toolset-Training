@@ -15,11 +15,21 @@ import sys
 import torch
 from pathlib import Path
 
+# Load .env file for API keys (HF_TOKEN, WANDB_API_KEY)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not required
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from unsloth import is_bfloat16_supported
 from trl import KTOConfig, KTOTrainer
+
+# Import custom KTO-S trainer (with SIGN correction)
+from src.kto_s_trainer import KTOSTrainer
 
 from configs.training_config import (
     Config,
@@ -34,7 +44,32 @@ from src.model_loader import (
     apply_lora_adapters,
     check_gpu_memory
 )
-from src.training_callbacks import MetricsTableCallback, CheckpointMonitorCallback
+from src.training_callbacks import MetricsTableCallback, CheckpointMonitorCallback, TwoStageLRCallback
+from src.adaptive_memory import AdaptiveMemoryManager, get_adaptive_settings
+
+
+def setup_wandb():
+    """Auto-setup W&B if API key is in environment."""
+    wandb_key = os.environ.get("WANDB_API_KEY")
+
+    if not wandb_key:
+        return False  # No key, W&B disabled
+
+    try:
+        import wandb
+
+        # Login with API key from .env
+        wandb.login(key=wandb_key, relogin=True, force=True)
+
+        print("✓ W&B: Logged in automatically (using WANDB_API_KEY from .env)")
+        return True
+
+    except ImportError:
+        print("⚠ W&B: API key found but wandb not installed. Install with: pip install wandb")
+        return False
+    except Exception as e:
+        print(f"⚠ W&B: Login failed - {e}")
+        return False
 
 
 def setup_environment():
@@ -79,6 +114,77 @@ def get_config_by_size(model_size: str) -> Config:
     return configs[model_size]()
 
 
+def extract_previous_log_entries(checkpoint_path: str) -> list:
+    """Extract log entries from a previous run when resuming from checkpoint.
+
+    Args:
+        checkpoint_path: Path to checkpoint directory (e.g., "kto_output_rtx3090/20251114_135227/checkpoints/checkpoint-50")
+
+    Returns:
+        List of log entry dicts from the original run, up to the checkpoint step
+    """
+    import json
+    import re
+    from glob import glob
+
+    # Parse checkpoint path to extract timestamp directory and step number
+    checkpoint_path = Path(checkpoint_path)
+
+    # Extract step number from checkpoint name (e.g., "checkpoint-50" -> 50)
+    checkpoint_name = checkpoint_path.name
+    step_match = re.search(r'checkpoint-(\d+)', checkpoint_name)
+    if not step_match:
+        print(f"⚠ Warning: Could not extract step number from checkpoint path: {checkpoint_path}")
+        return []
+
+    resume_step = int(step_match.group(1))
+
+    # Navigate up to find the run directory (timestamp directory)
+    # checkpoint_path is like: kto_output_rtx3090/20251114_135227/checkpoints/checkpoint-50
+    # We want: kto_output_rtx3090/20251114_135227
+    run_dir = checkpoint_path.parent.parent
+
+    # Find log files in the logs subdirectory
+    logs_dir = run_dir / "logs"
+    if not logs_dir.exists():
+        print(f"⚠ Warning: Logs directory not found: {logs_dir}")
+        return []
+
+    # Find training log files (there may be multiple if resuming multiple times)
+    log_files = list(logs_dir.glob("training_*.jsonl"))
+    if not log_files:
+        print(f"⚠ Warning: No log files found in: {logs_dir}")
+        return []
+
+    # Use the most recent log file (sorted by name, which includes timestamp)
+    log_file = sorted(log_files)[-1]
+
+    print(f"\n✓ Found previous run log: {log_file}")
+    print(f"  Extracting entries from steps 0 to {resume_step}")
+
+    # Read log entries up to the resume step
+    previous_entries = []
+    try:
+        with open(log_file, 'r') as f:
+            for line in f:
+                entry = json.loads(line.strip())
+                step = entry.get('step', 0)
+
+                # Include entries up to and including the resume step
+                if step <= resume_step:
+                    previous_entries.append(entry)
+                else:
+                    # We've passed the resume step, no need to read further
+                    break
+
+        print(f"  Extracted {len(previous_entries)} log entries\n")
+        return previous_entries
+
+    except Exception as e:
+        print(f"⚠ Warning: Failed to read log file: {e}")
+        return []
+
+
 def main():
     parser = argparse.ArgumentParser(description="KTO Training on RTX 3090")
 
@@ -95,6 +201,32 @@ def main():
         type=str,
         help="Override model name (e.g., unsloth/mistral-7b-v0.3-bnb-4bit)"
     )
+
+    # Friendly model selection shortcuts
+    # 3B models (fast iteration)
+    parser.add_argument("--qwen-3b", action="store_true", help="Use Qwen2.5 3B Instruct (fast iteration)")
+    parser.add_argument("--llama-3b", action="store_true", help="Use Llama 3.2 3B Instruct (fast iteration)")
+
+    # 7-8B models (production quality)
+    parser.add_argument("--mistral-7b", action="store_true", help="Use Mistral 7B v0.3 (production quality)")
+    parser.add_argument("--llama-8b", action="store_true", help="Use Llama 3.1 8B Instruct")
+    parser.add_argument("--qwen-7b", action="store_true", help="Use Qwen2.5 7B Instruct")
+    parser.add_argument("--magistral", action="store_true", help="Use Magistral Small 2509 (~7B)")
+    parser.add_argument("--deepseek-7b", action="store_true", help="Use DeepSeek R1 Distill Qwen 7B (reasoning)")
+    parser.add_argument("--qwen-vl-8b", action="store_true", help="Use Qwen3 VL 8B Instruct (vision-language)")
+    parser.add_argument("--qwen-thinking-8b", action="store_true", help="Use Qwen3 VL 8B Thinking (reasoning + vision)")
+
+    # 11-14B models (advanced)
+    parser.add_argument("--llama-13b", action="store_true", help="Use Llama 2 13B (advanced)")
+    parser.add_argument("--llama-vision-11b", action="store_true", help="Use Llama 3.2 11B Vision Instruct")
+    parser.add_argument("--gemma-12b", action="store_true", help="Use Gemma 3 12B Instruct")
+    parser.add_argument("--deepseek-14b", action="store_true", help="Use DeepSeek R1 Distill Qwen 14B (reasoning)")
+
+    # 17-24B models (very large)
+    parser.add_argument("--llama-scout-17b", action="store_true", help="Use Llama 4 Scout 17B (very large)")
+    parser.add_argument("--gpt-20b", action="store_true", help="Use GPT-OSS 20B (very large)")
+    parser.add_argument("--mistral-24b", action="store_true", help="Use Mistral Small 3.2 24B Instruct (extremely large)")
+
     parser.add_argument(
         "--max-seq-length",
         type=int,
@@ -140,9 +272,25 @@ def main():
         help="Override gradient_accumulation_steps"
     )
     parser.add_argument(
+        "--adaptive-memory",
+        action="store_true",
+        help="Enable adaptive memory management (auto-adjust batch size based on VRAM)"
+    )
+    parser.add_argument(
+        "--target-vram-util",
+        type=float,
+        default=0.80,
+        help="Target VRAM utilization for adaptive memory (0.0-1.0, default: 0.80)"
+    )
+    parser.add_argument(
         "--learning-rate",
         type=float,
         help="Override learning rate"
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        help="Override KTO beta parameter (controls KL divergence penalty)"
     )
     parser.add_argument(
         "--num-epochs",
@@ -153,6 +301,25 @@ def main():
         "--max-steps",
         type=int,
         help="Override max training steps (takes precedence over epochs)"
+    )
+
+    # Two-stage learning rate schedule
+    parser.add_argument(
+        "--two-stage-lr",
+        action="store_true",
+        help="Enable two-stage learning rate schedule (reduces LR at specified step)"
+    )
+    parser.add_argument(
+        "--lr-reduction-step",
+        type=int,
+        default=50,
+        help="Step at which to reduce learning rate (default: 50)"
+    )
+    parser.add_argument(
+        "--lr-reduction-factor",
+        type=float,
+        default=0.5,
+        help="Factor to multiply LR by at reduction step (default: 0.5 = 50%% reduction)"
     )
 
     # Experiment tracking
@@ -180,6 +347,11 @@ def main():
         help="HuggingFace token for gated models"
     )
     parser.add_argument(
+        "--resume-from-checkpoint",
+        type=str,
+        help="Path to checkpoint directory to resume training from"
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Setup and validate without training"
@@ -187,12 +359,67 @@ def main():
 
     args = parser.parse_args()
 
+    # Process friendly model selection flags
+    model_map = {
+        # 3B models
+        'qwen_3b': ('3b', 'unsloth/Qwen2.5-3B-Instruct-bnb-4bit'),
+        'llama_3b': ('3b', 'unsloth/Llama-3.2-3B-Instruct-bnb-4bit'),
+
+        # 7-8B models
+        'mistral_7b': ('7b', 'unsloth/mistral-7b-v0.3-bnb-4bit'),
+        'llama_8b': ('7b', 'unsloth/llama-3.1-8b-instruct-bnb-4bit'),
+        'qwen_7b': ('7b', 'unsloth/Qwen2.5-7B-Instruct-bnb-4bit'),
+        'magistral': ('7b', 'unsloth/Magistral-Small-2509-unsloth-bnb-4bit'),
+        'deepseek_7b': ('7b', 'unsloth/DeepSeek-R1-Distill-Qwen-7B-unsloth-bnb-4bit'),
+        'qwen_vl_8b': ('7b', 'unsloth/Qwen3-VL-8B-Instruct-unsloth-bnb-4bit'),
+        'qwen_thinking_8b': ('7b', 'unsloth/Qwen3-VL-8B-Thinking-unsloth-bnb-4bit'),
+
+        # 11-14B models
+        'llama_13b': ('13b', 'unsloth/llama-2-13b-bnb-4bit'),
+        'llama_vision_11b': ('13b', 'unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit'),
+        'gemma_12b': ('13b', 'unsloth/gemma-3-12b-it-unsloth-bnb-4bit'),
+        'deepseek_14b': ('13b', 'unsloth/DeepSeek-R1-Distill-Qwen-14B-unsloth-bnb-4bit'),
+
+        # 17-24B models
+        'llama_scout_17b': ('20b', 'unsloth/Llama-4-Scout-17B-16E-Instruct-unsloth-bnb-4bit'),
+        'gpt_20b': ('20b', 'unsloth/gpt-oss-20b-unsloth-bnb-4bit'),
+        'mistral_24b': ('20b', 'unsloth/Mistral-Small-3.2-24B-Instruct-2506-unsloth-bnb-4bit'),
+    }
+
+    for flag, (size, model_name) in model_map.items():
+        if getattr(args, flag):
+            args.model_size = size
+            args.model_name = model_name
+            break
+
     # Setup environment
     setup_environment()
+
+    # Auto-setup W&B if API key present in .env
+    wandb_auto_enabled = setup_wandb()
 
     # Get configuration
     print(f"Using {args.model_size.upper()} model configuration\n")
     config = get_config_by_size(args.model_size)
+
+    # Create timestamped run directory
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_output_dir = Path(config.training.output_dir)
+    run_dir = base_output_dir / timestamp
+
+    # Create subdirectories for this run
+    checkpoints_dir = run_dir / "checkpoints"
+    logs_dir = run_dir / "logs"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Update config to use timestamped directories
+    config.training.output_dir = str(checkpoints_dir)
+
+    print(f"Training run directory: {run_dir}")
+    print(f"  Checkpoints: {checkpoints_dir}")
+    print(f"  Logs: {logs_dir}\n")
 
     # Apply command-line overrides
     if args.model_name:
@@ -209,20 +436,61 @@ def main():
 
     if args.output_dir:
         config.training.output_dir = args.output_dir
-    if args.batch_size:
+    # Apply adaptive memory management if requested
+    if args.adaptive_memory:
+        print("\n" + "="*60)
+        print("ADAPTIVE MEMORY MANAGEMENT")
+        print("="*60)
+        adaptive_settings = get_adaptive_settings(
+            model_size=args.model_size,
+            target_utilization=args.target_vram_util
+        )
+        config.training.per_device_train_batch_size = adaptive_settings["batch_size"]
+        config.training.gradient_accumulation_steps = adaptive_settings["gradient_accumulation"]
+        if adaptive_settings.get("gradient_checkpointing"):
+            config.training.gradient_checkpointing = True
+        print(f"✓ Automatically adjusted settings:")
+        print(f"  Batch size: {adaptive_settings['batch_size']}")
+        print(f"  Gradient accumulation: {adaptive_settings['gradient_accumulation']}")
+        print(f"  Effective batch size: {adaptive_settings['batch_size'] * adaptive_settings['gradient_accumulation']}")
+        print(f"  Gradient checkpointing: {adaptive_settings.get('gradient_checkpointing', False)}")
+        print("="*60 + "\n")
+    # Allow manual overrides even with adaptive memory
+    elif args.batch_size:
         config.training.per_device_train_batch_size = args.batch_size
     if args.gradient_accumulation:
         config.training.gradient_accumulation_steps = args.gradient_accumulation
     if args.learning_rate:
         config.training.learning_rate = args.learning_rate
+    if args.beta:
+        config.training.beta = args.beta
     if args.num_epochs:
         config.training.num_train_epochs = args.num_epochs
 
-    if args.wandb:
+    # Apply two-stage LR schedule overrides
+    if args.two_stage_lr:
+        config.training.use_two_stage_lr = True
+    if args.lr_reduction_step:
+        config.training.lr_reduction_step = args.lr_reduction_step
+    if args.lr_reduction_factor:
+        config.training.lr_reduction_factor = args.lr_reduction_factor
+
+    # Auto-enable W&B if API key found or --wandb flag used
+    if wandb_auto_enabled or args.wandb:
         config.use_wandb = True
-        config.wandb_project = args.wandb_project
+        # Use sensible defaults for project/run name if not specified
+        if args.wandb_project:
+            config.wandb_project = args.wandb_project
+        elif not hasattr(config, 'wandb_project') or not config.wandb_project:
+            config.wandb_project = "kto-training"  # Default project name
+
         if args.wandb_run_name:
             config.wandb_run_name = args.wandb_run_name
+        elif not hasattr(config, 'wandb_run_name') or not config.wandb_run_name:
+            # Auto-generate run name: model-size-timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            config.wandb_run_name = f"{args.model_size}-{timestamp}"
 
     # Load dataset
     train_dataset, eval_dataset = load_and_prepare_dataset(
@@ -283,7 +551,7 @@ def main():
         optim=config.training.optim,
         fp16=not is_bfloat16_supported() if config.training.fp16 is False else config.training.fp16,
         bf16=is_bfloat16_supported() if config.training.bf16 is True else config.training.bf16,
-        num_train_epochs=config.training.num_train_epochs if not args.max_steps else None,
+        num_train_epochs=1 if args.max_steps else config.training.num_train_epochs,
         max_steps=args.max_steps if args.max_steps else -1,
         warmup_ratio=config.training.warmup_ratio,
         logging_steps=config.training.logging_steps,
@@ -315,6 +583,11 @@ def main():
     print(f"  Effective batch size: {effective_batch}")
     print(f"\nHyperparameters:")
     print(f"  Learning rate: {config.training.learning_rate}")
+    if config.training.use_two_stage_lr:
+        reduced_lr = config.training.learning_rate * config.training.lr_reduction_factor
+        print(f"  Two-stage LR: ENABLED")
+        print(f"    - Steps 1-{config.training.lr_reduction_step}: {config.training.learning_rate:.2e}")
+        print(f"    - Steps {config.training.lr_reduction_step+1}+: {reduced_lr:.2e} ({config.training.lr_reduction_factor:.1%} reduction)")
     print(f"  Beta: {config.training.beta}")
     print(f"  Warmup ratio: {config.training.warmup_ratio}")
     print(f"  Max length: {config.training.max_length}")
@@ -337,32 +610,68 @@ def main():
         print("✓ Dry run completed. Exiting without training.")
         return
 
+    # Extract previous log entries if resuming from checkpoint
+    previous_log_entries = None
+    if args.resume_from_checkpoint:
+        previous_log_entries = extract_previous_log_entries(args.resume_from_checkpoint)
+
     # Initialize callbacks
     callbacks = [
-        MetricsTableCallback(log_every_n_steps=5, output_dir=config.training.output_dir),
+        MetricsTableCallback(
+            log_every_n_steps=5,
+            output_dir=str(logs_dir),
+            previous_log_entries=previous_log_entries
+        ),
         CheckpointMonitorCallback()
     ]
 
-    # Initialize KTO Trainer
-    print("Initializing KTO Trainer...")
-    trainer = KTOTrainer(
-        model=model,
-        args=training_args,
-        tokenizer=tokenizer,  # Use 'tokenizer' for TRL 0.11.4
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        callbacks=callbacks,
-    )
+    # Add two-stage LR callback if enabled
+    if config.training.use_two_stage_lr:
+        reduced_lr = config.training.learning_rate * config.training.lr_reduction_factor
+        callbacks.append(
+            TwoStageLRCallback(
+                initial_lr=config.training.learning_rate,
+                reduced_lr=reduced_lr,
+                reduction_step=config.training.lr_reduction_step
+            )
+        )
+
+    # Initialize KTO Trainer (with optional KTO-S)
+    if config.training.use_kto_s:
+        print("Initializing KTO-S Trainer (with SIGN correction)...")
+        trainer = KTOSTrainer(
+            model=model,
+            args=training_args,
+            tokenizer=tokenizer,  # Use 'tokenizer' for TRL 0.11.4
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            callbacks=callbacks,
+            use_sign_correction=True,  # Enable SIGN correction
+        )
+    else:
+        print("Initializing Standard KTO Trainer...")
+        print("⚠️  Warning: Standard KTO may have KL spikes with base models")
+        trainer = KTOTrainer(
+            model=model,
+            args=training_args,
+            tokenizer=tokenizer,  # Use 'tokenizer' for TRL 0.11.4
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            callbacks=callbacks,
+        )
 
     print("✓ KTO trainer initialized with metrics tracking\n")
 
     # Start training
     print("=" * 60)
-    print("STARTING TRAINING")
+    if args.resume_from_checkpoint:
+        print(f"RESUMING TRAINING FROM: {args.resume_from_checkpoint}")
+    else:
+        print("STARTING TRAINING")
     print("=" * 60 + "\n")
 
     try:
-        trainer_output = trainer.train()
+        trainer_output = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
         print("\n" + "=" * 60)
         print("✓ TRAINING COMPLETED SUCCESSFULLY!")
@@ -392,7 +701,7 @@ def main():
     print("SAVING MODEL")
     print("=" * 60)
 
-    output_path = Path(config.training.output_dir) / "final_model"
+    output_path = run_dir / "final_model"
     model.save_pretrained(str(output_path))
     tokenizer.save_pretrained(str(output_path))
 

@@ -52,24 +52,24 @@ nvidia-smi
 
 ```bash
 # Dry run to test setup (no training)
-python train_kto.py \
-  --model-size 3b \
-  --local-file examples/sample_dataset.jsonl \
-  --dry-run
+./train.sh --model-size 3b --dry-run
+
+# Or use Python directly:
+# venv/bin/python train_kto.py --model-size 3b --dry-run
 
 # Expected: ✓ Dry run completed. Exiting without training.
 ```
 
 ## 4. First Real Training (5-10 minutes)
 
-Train a small 3B model on the sample dataset:
+Train a small 3B model on the default dataset:
 
 ```bash
-python train_kto.py \
-  --model-size 3b \
-  --local-file examples/sample_dataset.jsonl \
-  --num-epochs 1 \
-  --output-dir ./test_output
+# Easiest method (uses wrapper script):
+./train.sh --model-size 3b --num-epochs 1
+
+# Or use Python directly:
+# venv/bin/python train_kto.py --model-size 3b --num-epochs 1
 ```
 
 This will:
@@ -84,7 +84,11 @@ This will:
 
 ```bash
 # 7B model on Claudesidian dataset (4,652 examples)
-python train_kto.py --model-size 7b
+# Easiest method (uses wrapper script):
+./train.sh --model-size 7b
+
+# Or use Python directly:
+# venv/bin/python train_kto.py --model-size 7b
 
 # Expected time: 2-3 hours for 1 epoch
 # Output: ./kto_output_rtx3090/
@@ -102,10 +106,11 @@ Prepare your data in JSONL format:
 Then train:
 
 ```bash
-python train_kto.py \
-  --model-size 7b \
-  --local-file ./my_data.jsonl \
-  --output-dir ./my_model
+# Using wrapper script:
+./train.sh --model-size 7b --local-file ./my_data.jsonl
+
+# Or using Python directly:
+# venv/bin/python train_kto.py --model-size 7b --local-file ./my_data.jsonl
 ```
 
 ## 6. Test Your Model
@@ -133,7 +138,8 @@ python src/upload_to_hf.py \
 
 ### Fast Iteration (3B Model)
 ```bash
-python train_kto.py --model-size 3b --batch-size 8
+./train.sh --model-size 3b --batch-size 8
+# Or: venv/bin/python train_kto.py --model-size 3b --batch-size 8
 ```
 - Fastest training
 - Good for testing
@@ -141,7 +147,8 @@ python train_kto.py --model-size 3b --batch-size 8
 
 ### Production Quality (7B Model) ⭐
 ```bash
-python train_kto.py --model-size 7b --batch-size 4
+./train.sh --model-size 7b
+# Or: venv/bin/python train_kto.py --model-size 7b
 ```
 - Best quality/speed balance
 - Recommended for production
@@ -149,7 +156,8 @@ python train_kto.py --model-size 7b --batch-size 4
 
 ### Maximum Quality (13B Model)
 ```bash
-python train_kto.py --model-size 13b --batch-size 2
+./train.sh --model-size 13b
+# Or: venv/bin/python train_kto.py --model-size 13b
 ```
 - Highest quality
 - Slower training
@@ -157,11 +165,8 @@ python train_kto.py --model-size 13b --batch-size 2
 
 ### With Experiment Tracking
 ```bash
-python train_kto.py \
-  --model-size 7b \
-  --wandb \
-  --wandb-project my-project \
-  --wandb-run-name mistral-7b-kto
+./train.sh --model-size 7b --wandb --wandb-project my-project
+# Or: venv/bin/python train_kto.py --model-size 7b --wandb --wandb-project my-project
 ```
 
 ## Troubleshooting

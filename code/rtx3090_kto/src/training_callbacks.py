@@ -18,11 +18,13 @@ class MetricsTableCallback(TrainerCallback):
     Shows metrics every N steps to track training progress.
     """
 
-    def __init__(self, log_every_n_steps: int = 5, output_dir: str = "./kto_output_rtx3090"):
+    def __init__(self, log_every_n_steps: int = 5, output_dir: str = "./kto_output_rtx3090",
+                 previous_log_entries: list = None):
         """
         Args:
             log_every_n_steps: Print table every N training steps
             output_dir: Directory to save detailed logs
+            previous_log_entries: Optional list of log entries from a previous run to prepopulate the log
         """
         self.log_every_n_steps = log_every_n_steps
         self.output_dir = Path(output_dir)
@@ -39,6 +41,10 @@ class MetricsTableCallback(TrainerCallback):
         self.start_time = None
         self.step_times = []
         self.header_printed = False
+
+        # Prepopulate log file with previous entries if resuming
+        if previous_log_entries:
+            self._prepopulate_log(previous_log_entries)
 
     def on_train_begin(self, args, state, control, **kwargs):
         """Called at the beginning of training."""
@@ -127,6 +133,21 @@ class MetricsTableCallback(TrainerCallback):
         with open(self.log_file, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
 
+    def _prepopulate_log(self, previous_entries: list):
+        """Prepopulate log file with entries from a previous run.
+
+        Args:
+            previous_entries: List of dict entries to write to the log file
+        """
+        print(f"\n✓ Prepopulating log with {len(previous_entries)} entries from previous run")
+
+        with open(self.log_file, "w") as f:
+            for entry in previous_entries:
+                f.write(json.dumps(entry) + "\n")
+
+        print(f"  Log file: {self.log_file}")
+        print(f"  Steps included: 0-{previous_entries[-1]['step'] if previous_entries else 0}\n")
+
     def _check_training_health(self, logs: Dict[str, Any], step: int):
         """Check if training metrics are healthy and warn if not."""
         warnings = []
@@ -196,6 +217,58 @@ class MetricsTableCallback(TrainerCallback):
             hours = int(seconds // 3600)
             minutes = int((seconds % 3600) // 60)
             return f"{hours}h {minutes}m"
+
+
+class TwoStageLRCallback(TrainerCallback):
+    """
+    Custom callback that implements a two-stage learning rate schedule.
+
+    This reduces the learning rate at a specified step to prevent optimization
+    instability while maintaining fast early learning.
+
+    Example:
+        Steps 1-50:  LR = 5e-7 (fast early learning)
+        Steps 51+:   LR = 2.5e-7 (reduced to prevent overshoot/instability)
+    """
+
+    def __init__(self, initial_lr: float, reduced_lr: float, reduction_step: int):
+        """
+        Args:
+            initial_lr: Learning rate for early training (e.g., 5e-7)
+            reduced_lr: Reduced learning rate after reduction_step (e.g., 2.5e-7)
+            reduction_step: Step at which to reduce LR (e.g., 50)
+        """
+        self.initial_lr = initial_lr
+        self.reduced_lr = reduced_lr
+        self.reduction_step = reduction_step
+        self.lr_reduced = False
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        """Display two-stage LR schedule configuration."""
+        print("\n" + "=" * 100)
+        print("TWO-STAGE LEARNING RATE SCHEDULE")
+        print("=" * 100)
+        print(f"  Steps 1-{self.reduction_step}:  LR = {self.initial_lr:.2e} (fast early learning)")
+        print(f"  Steps {self.reduction_step+1}+:     LR = {self.reduced_lr:.2e} ({(self.reduced_lr/self.initial_lr)*100:.0f}% of initial, prevents instability)")
+        print(f"  Reduction ratio: {self.reduced_lr/self.initial_lr:.1%}")
+        print("=" * 100 + "\n")
+
+    def on_step_begin(self, args, state, control, **kwargs):
+        """Check if we need to reduce learning rate at this step."""
+        if state.global_step == self.reduction_step and not self.lr_reduced:
+            # Reduce learning rate for all parameter groups
+            optimizer = kwargs.get('optimizer')
+            if optimizer is not None:
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = self.reduced_lr
+
+                self.lr_reduced = True
+
+                print("\n" + "!" * 100)
+                print(f"🔧 LEARNING RATE REDUCED at step {state.global_step}")
+                print(f"   {self.initial_lr:.2e} → {self.reduced_lr:.2e} (50% reduction)")
+                print(f"   Reason: Preemptive intervention before step 60 instability zone")
+                print("!" * 100 + "\n")
 
 
 class CheckpointMonitorCallback(TrainerCallback):

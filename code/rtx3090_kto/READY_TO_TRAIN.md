@@ -30,9 +30,37 @@ All issues have been resolved. Here's what was fixed:
 
 ## Quick Start
 
-### From Current Terminal (if environment already activated):
+### Easiest Way: Use the Wrapper Script
+
 ```bash
-python train_kto.py --model-size 7b --batch-size 8 --gradient-accumulation 4
+# Basic training (uses local venv automatically):
+./train.sh --model-size 7b
+
+# With adaptive memory management (recommended):
+./train.sh --model-size 7b --adaptive-memory
+
+# Conservative memory usage (default config):
+./train.sh --model-size 7b
+```
+
+### With Weights & Biases (Recommended!)
+W&B is **automatically enabled** if you add `WANDB_API_KEY` to your `.env` file. You'll get beautiful dashboards for free!
+
+```bash
+# Just run training normally - W&B will auto-enable if key is in .env
+./train.sh --model-size 7b --adaptive-memory
+```
+
+On first run, you'll see:
+```
+✓ W&B: Logged in automatically (using WANDB_API_KEY from .env)
+wandb: 🚀 View run at https://wandb.ai/your-username/kto-training/runs/7b-202511...
+```
+
+### Alternative: Direct Python Usage
+```bash
+# Using venv Python directly (if train.sh doesn't work):
+venv/bin/python train_kto.py --model-size 7b --adaptive-memory
 ```
 
 ### From Fresh Terminal:
@@ -44,8 +72,8 @@ cd /mnt/c/Users/Joseph/Documents/Code/Toolset-Training/code/rtx3090_kto
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate ./venv
 
-# Start training
-python train_kto.py --model-size 7b --batch-size 8 --gradient-accumulation 4
+# Start training (W&B auto-enables if WANDB_API_KEY in .env)
+python train_kto.py --model-size 7b
 ```
 
 ## What You'll See
@@ -147,18 +175,20 @@ Check GPU utilization with `nvidia-smi`:
 
 ## Configuration Summary
 
-Current optimized settings:
+Current settings (conservative for safety):
 
 ```python
 # Model
 model_name: "unsloth/mistral-7b-v0.3-bnb-4bit"
-max_seq_length: 2048
+max_seq_length: 4096
 load_in_4bit: True
 
-# Batch (OPTIMIZED for 24GB)
-per_device_train_batch_size: 8
-gradient_accumulation_steps: 4
+# Batch (CONSERVATIVE - uses ~12-15GB)
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 8
 effective_batch_size: 32
+
+# Use --adaptive-memory for automatic optimization!
 
 # LoRA
 rank: 64

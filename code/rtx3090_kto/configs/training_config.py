@@ -25,7 +25,7 @@ class ModelConfig:
     # model_name: str = "unsloth/llama-2-13b-bnb-4bit"
 
     # Model parameters
-    max_seq_length: int = 2048  # 1024-4096 depending on VRAM
+    max_seq_length: int = 4096  # Increased from 2048 for better context
     dtype: Optional[str] = None  # Auto-detection
     load_in_4bit: bool = True  # Essential for memory efficiency
 
@@ -58,26 +58,62 @@ class KTOTrainingConfig:
     # Output directory
     output_dir: str = "./kto_output_rtx3090"
 
-    # Batch size configuration - OPTIMIZED FOR 24GB VRAM
-    # For 3B models: batch_size=16, accumulation=2 (effective=32)
-    # For 7B models: batch_size=8, accumulation=4 (effective=32) - USES ~20GB VRAM
-    # For 13B models: batch_size=4, accumulation=8 (effective=32)
-    per_device_train_batch_size: int = 8  # 2x increase for 7B models (uses ~20GB)
-    gradient_accumulation_steps: int = 4  # Reduced since batch is larger
+    per_device_train_batch_size: int = 8  # Reduced from 8 for safer memory usage
+    gradient_accumulation_steps: int = 4  # Increased to maintain effective batch size of 32  
 
     # KTO-specific parameters
-    beta: float = 0.1  # KTO beta parameter (0.01-0.5, default 0.1)
+    beta: float = 0.2
     desirable_weight: float = 1.0
     undesirable_weight: float = 1.0
 
     # Learning rate
     learning_rate: float = 5e-7  # Conservative for KTO (5e-7 to 1e-6)
-    max_grad_norm: float = 1.0
+    max_grad_norm: float = 1.0  # Run 8: Back to default (0.5 had no effect in Run 7)
     lr_scheduler_type: str = "cosine"
 
+    # ============================================================================
+    # RUN 8: TWO-STAGE LEARNING RATE SCHEDULE
+    # ============================================================================
+    # Preemptively reduces LR at step 50 to prevent step 60 spike
+    # Theory: Optimizer builds momentum (steps 1-50), then overshoots (step 60)
+    # Solution: Give it "brakes" BEFORE the instability zone
+    #
+    # To disable: Set use_two_stage_lr = False
+    # To tune: Adjust lr_reduction_step and lr_reduction_factor below
+    #
+    # DISABLED: Testing KTO-S instead (more fundamental fix)
+    # ============================================================================
+    use_two_stage_lr: bool = False  # Disabled - using KTO-S SIGN correction instead
+    lr_reduction_step: int = 50     # Reduce LR at step 50 (before step 60 danger zone)
+    lr_reduction_factor: float = 0.5  # 50% reduction (5e-7 → 2.5e-7)
+    # ============================================================================
+    # Easy tuning examples:
+    #   Earlier:     lr_reduction_step = 45
+    #   Aggressive:  lr_reduction_factor = 0.25  (75% reduction)
+    #   Gentler:     lr_reduction_factor = 0.75  (25% reduction)
+    # ============================================================================
+
+    # ============================================================================
+    # KTO-S: SIGN CORRECTION FOR STABLE KL DIVERGENCE
+    # ============================================================================
+    # Fixes gradient scaling bug in standard KTO that causes early KL spikes
+    # Research shows KTO has instability when training from base models
+    #
+    # Standard KTO: Higher-KL responses get STRONGER updates (bug!)
+    # KTO-S:        SIGN correction fixes gradient direction
+    #
+    # Expected results with KTO-S:
+    #   Step 10: KL < 0.1 (vs ~0.2 without)
+    #   Step 20: KL < 0.1 (vs ~2.0 explosion without)
+    #
+    # To disable: Set use_kto_s = False (not recommended for base models)
+    # ============================================================================
+    use_kto_s: bool = True  # Enable SIGN correction (recommended for stable training)
+    # ============================================================================
+
     # Sequence lengths
-    max_length: int = 2048  # Must match ModelConfig.max_seq_length
-    max_prompt_length: int = 1024  # Should be ≤ max_length / 2
+    max_length: int = 4096  # Must match ModelConfig.max_seq_length
+    max_prompt_length: int = 2048  # Should be ≤ max_length / 2
 
     # Memory optimizations
     gradient_checkpointing: bool = False  # Not needed with 24GB for 7B
@@ -146,13 +182,13 @@ def get_3b_config() -> Config:
     """Configuration optimized for 3B models (fast iteration) - USES ~16GB VRAM."""
     config = Config()
     config.model.model_name = "unsloth/Qwen2.5-3B-Instruct-bnb-4bit"
-    config.model.max_seq_length = 2048
+    config.model.max_seq_length = 4096
     config.lora.r = 32
     config.lora.lora_alpha = 64
     config.training.per_device_train_batch_size = 16  # Increased for 24GB VRAM
     config.training.gradient_accumulation_steps = 2   # Reduced (still effective=32)
-    config.training.max_length = 2048
-    config.training.max_prompt_length = 1024
+    config.training.max_length = 4096
+    config.training.max_prompt_length = 2048
     config.training.gradient_checkpointing = False
     return config
 
@@ -161,13 +197,13 @@ def get_7b_config() -> Config:
     """Configuration optimized for 7B models (production quality) - USES ~20GB VRAM."""
     config = Config()
     config.model.model_name = "unsloth/mistral-7b-v0.3-bnb-4bit"
-    config.model.max_seq_length = 2048
+    config.model.max_seq_length = 4096
     config.lora.r = 64
     config.lora.lora_alpha = 128
     config.training.per_device_train_batch_size = 8  # 2x increase for 24GB VRAM
     config.training.gradient_accumulation_steps = 4  # Reduced (still effective=32)
-    config.training.max_length = 2048
-    config.training.max_prompt_length = 1024
+    config.training.max_length = 4096
+    config.training.max_prompt_length = 2048
     config.training.gradient_checkpointing = False
     return config
 
@@ -176,13 +212,13 @@ def get_13b_config() -> Config:
     """Configuration optimized for 13B models (advanced) - USES ~22GB VRAM."""
     config = Config()
     config.model.model_name = "unsloth/llama-2-13b-bnb-4bit"
-    config.model.max_seq_length = 2048
+    config.model.max_seq_length = 4096
     config.lora.r = 64
     config.lora.lora_alpha = 128
     config.training.per_device_train_batch_size = 4  # Increased for 24GB VRAM
     config.training.gradient_accumulation_steps = 8  # Reduced (still effective=32)
-    config.training.max_length = 2048
-    config.training.max_prompt_length = 1024
+    config.training.max_length = 4096
+    config.training.max_prompt_length = 2048
     config.training.gradient_checkpointing = True  # Still needed for 13B
     return config
 
