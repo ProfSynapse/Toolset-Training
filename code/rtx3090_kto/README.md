@@ -33,15 +33,23 @@ python -c "from unsloth import FastLanguageModel; print('Unsloth: OK')"
 ### 2. Basic Training (7B Model - Recommended)
 
 ```bash
-# Train Mistral-7B on default dataset
-python train_kto.py --model-size 7b
+# Easiest method (wrapper script):
+./train.sh --model-size 7b
 
-# With custom dataset
-python train_kto.py --model-size 7b --local-file ./my_data.jsonl
+# Or with Python directly:
+venv/bin/python train_kto.py --model-size 7b
 
-# With W&B logging
-python train_kto.py --model-size 7b --wandb --wandb-project my-project
+# With adaptive memory management (auto-adjusts batch size):
+./train.sh --model-size 7b --adaptive-memory
+
+# With custom dataset:
+./train.sh --model-size 7b --local-file ./my_data.jsonl
+
+# With W&B logging:
+./train.sh --model-size 7b --wandb --wandb-project my-project
 ```
+
+**Note**: The `train.sh` wrapper ensures the correct Python environment is used. You can also use `venv/bin/python` directly.
 
 ### 3. Advanced Training Options
 
