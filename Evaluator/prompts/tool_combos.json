@@ -1,0 +1,83 @@
+[
+  {
+    "id": "combo_workspace_health",
+    "question": "Load the Atlas rollout workspace, scan the Projects folder for any mention of \"delayed migrations\", and append a short update to the rollout tracker summarizing what you found.",
+    "tags": ["multi-step", "workspace"],
+    "expected_tools": [
+      "memoryManager_loadWorkspace",
+      "vaultLibrarian_searchContent",
+      "contentManager_appendContent"
+    ],
+    "notes": "Explicit order: scope workspace → search → append note."
+  },
+  {
+    "id": "combo_session_checkpoint",
+    "question": "Start a fresh session for \"Helios readiness\", immediately capture a state snapshot called \"helios_day0\", and update the session description to mention that state name so others can reload it.",
+    "tags": ["multi-step", "memoryManager"],
+    "expected_tools": [
+      "memoryManager_createSession",
+      "memoryManager_createState",
+      "memoryManager_updateSession"
+    ]
+  },
+  {
+    "id": "combo_tool_discovery",
+    "question": "Fetch the latest schemas for vaultManager and contentManager, list what is inside Projects/Clients/Northwind/, then open whichever note looks like the main kickoff plan and read it back.",
+    "tags": ["multi-step", "discovery"],
+    "expected_tools": [
+      "get_tools",
+      "vaultManager_listDirectory",
+      "contentManager_readContent"
+    ]
+  },
+  {
+    "id": "combo_agent_image",
+    "question": "Check which agent models can generate images, render a three-panel storyboard for the Atlas onboarding journey, and append that generated asset's description to Projects/Briefings/Atlas.md.",
+    "tags": ["multi-step", "agentManager"],
+    "expected_tools": [
+      "agentManager_listModels",
+      "agentManager_generateImage",
+      "contentManager_appendContent"
+    ]
+  },
+  {
+    "id": "combo_batch_cleanup",
+    "question": "List the Projects/Initiatives directory, move the entire LegacyCleanup folder into Archives/Legacy/2024/, then delete the orphaned Projects/Initiatives/LegacyCleanup.md note if it still exists.",
+    "tags": ["multi-step", "vaultManager"],
+    "expected_tools": [
+      "vaultManager_listDirectory",
+      "vaultManager_moveFolder",
+      "vaultManager_deleteNote"
+    ]
+  },
+  {
+    "id": "combo_command_runbook",
+    "question": "List our automation commands, run the one that posts the latest runbook to Confluence, and then update the \"Runbook Publishing\" workspace description to mention that the push happened today.",
+    "tags": ["multi-step", "commandManager"],
+    "expected_tools": [
+      "commandManager_listCommands",
+      "commandManager_executeCommand",
+      "memoryManager_updateWorkspace"
+    ]
+  },
+  {
+    "id": "combo_librarian_batch",
+    "question": "Run a batch librarian search for \"vault crash\" within Incidents/, double-check conversation memory for prior crash summaries, and prepend a \"Crash history\" section to Projects/Incidents/Vault-Crash.md.",
+    "tags": ["multi-step", "vaultLibrarian"],
+    "expected_tools": [
+      "vaultLibrarian_batch",
+      "vaultLibrarian_searchMemory",
+      "contentManager_prependContent"
+    ]
+  },
+  {
+    "id": "combo_state_restore",
+    "question": "Restore the saved state named \"phoenix_hotfix_plan\", open Projects/Rollouts/Phoenix.md, and replace line 8 with the new escalation contact.",
+    "tags": ["multi-step", "state-restore"],
+    "expected_tools": [
+      "memoryManager_loadState",
+      "vaultManager_openNote",
+      "contentManager_replaceByLine"
+    ]
+  }
+]
