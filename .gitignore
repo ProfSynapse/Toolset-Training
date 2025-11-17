@@ -67,7 +67,6 @@ unsloth_compiled_cache/
 
 # Claude export data (large files)
 data-*/
-*.json
 !tool_schemas.json
 !package.json
 
