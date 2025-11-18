@@ -702,7 +702,7 @@ def main():
     callbacks = [
         MetricsTableCallback(
             log_every_n_steps=5,
-            output_dir=str(logs_dir),
+            output_dir=str(run_dir),  # Pass run_dir, callback adds /logs
             previous_log_entries=previous_log_entries
         ),
         CheckpointMonitorCallback()

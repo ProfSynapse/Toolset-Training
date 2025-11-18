@@ -25,7 +25,7 @@ class ModelConfig:
     # model_name: str = "unsloth/llama-2-13b-bnb-4bit"
 
     # Model parameters
-    max_seq_length: int = 2048  # Optimized based on dataset analysis (99th percentile: 1506 tokens)
+    max_seq_length: int = 2048  # Testing with gradient checkpointing (dataset 99th percentile: 1506 tokens)
     dtype: Optional[str] = None  # Auto-detection
     load_in_4bit: bool = True  # Essential for memory efficiency
 
@@ -34,8 +34,8 @@ class ModelConfig:
 class LoRAConfig:
     """LoRA adapter configuration."""
 
-    r: int = 32  # LoRA rank (3B model)
-    lora_alpha: int = 64  # LoRA scaling factor (3B model)
+    r: int = 32  
+    lora_alpha: int = 64  
     lora_dropout: float = 0.05
     bias: str = "none"
     target_modules: List[str] = field(default_factory=lambda: [
@@ -53,17 +53,17 @@ class KTOTrainingConfig:
     # Output directory
     output_dir: str = "./kto_output_rtx3090"
 
-    per_device_train_batch_size: int = 4  # Reduced for faster iteration
-    gradient_accumulation_steps: int = 4  # Reduced (effective batch: 16)  
+    per_device_train_batch_size: int = 4 
+    gradient_accumulation_steps: int = 6   
 
     # KTO-specific parameters
-    beta: float = 0.15  # Compromise between 0.10 and 0.20
+    beta: float = 0.3 
     desirable_weight: float = 1.0
     undesirable_weight: float = 1.0
 
     # Learning rate - INCREASED for faster learning with 3B model
-    learning_rate: float = 5e-7  # 5x increase for fast iteration
-    max_grad_norm: float = 0.5  # Moderate gradient clipping
+    learning_rate: float = 2e-7  
+    max_grad_norm: float = 0.5  
     lr_scheduler_type: str = "cosine"
     # adam_epsilon: float = 1e-6  # Adam optimizer epsilon for numerical stability
 
@@ -108,17 +108,17 @@ class KTOTrainingConfig:
     # ============================================================================
 
     # Sequence lengths
-    max_length: int = 2048  # Must match ModelConfig.max_seq_length
+    max_length: int = 2048  # Testing with gradient checkpointing
     max_prompt_length: int = 1024  # Should be ≤ max_length / 2
 
     # Memory optimizations
-    gradient_checkpointing: bool = False  # Not needed with 24GB for 7B
+    gradient_checkpointing: bool = True  # REQUIRED to prevent memory leak
     optim: str = "adamw_8bit"  # 8-bit optimizer saves ~2GB VRAM
     fp16: bool = False  # Set dynamically based on GPU
     bf16: bool = True  # RTX 3090 supports BF16 (Ampere)
 
     # Training schedule
-    num_train_epochs: int = 2  # Balance between speed and learning
+    num_train_epochs: int = 1  # Balance between speed and learning
     warmup_ratio: float = 0.15  # 15% warmup for stability
 
     # Logging and saving
