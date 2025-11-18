@@ -14,16 +14,65 @@ Write-Host "====================================================================
 Write-Host ""
 
 # ============================================================================
-# STEP 1: Navigate to training directory
+# STEP 1: Navigate to training directory and load config
 # ============================================================================
-Write-Host "[1/6] Navigating to training directory..." -ForegroundColor Yellow
+Write-Host "[1/6] Loading configuration..." -ForegroundColor Yellow
 
-$ProjectRoot = "C:\Users\Joseph\Documents\Code\Toolset-Training"
-$TrainingDir = Join-Path $ProjectRoot "Trainers\rtx3090_sft"
-$DatasetPath = Join-Path $ProjectRoot "Datasets\syngen_tools_sft_11.18.25.jsonl"
-
+# Get script directory (should be Trainers/rtx3090_sft)
+$TrainingDir = $PSScriptRoot
 Set-Location $TrainingDir
-Write-Host "  [OK] Current directory: $TrainingDir" -ForegroundColor Green
+
+# Find project root (two levels up from training dir)
+$ProjectRoot = (Get-Item $TrainingDir).Parent.Parent.FullName
+
+Write-Host "  [OK] Training directory: $TrainingDir" -ForegroundColor Green
+Write-Host "  [OK] Project root: $ProjectRoot" -ForegroundColor Green
+
+# Read dataset path from YAML config using Python
+$ConfigScript = @"
+import sys
+sys.path.insert(0, r'$TrainingDir')
+from configs.config_loader import get_7b_config
+config = get_7b_config()
+# Resolve relative path to absolute
+import os
+if config.dataset.local_file:
+    dataset_path = os.path.normpath(os.path.join(r'$TrainingDir', config.dataset.local_file))
+    print(dataset_path)
+else:
+    print(f'{config.dataset.dataset_name}/{config.dataset.dataset_file}')
+"@
+
+# Find Python first (will do this in next step but need it now for config)
+$UnslothEnvPaths = @(
+    "$env:USERPROFILE\miniconda3\envs\unsloth_env\python.exe",
+    "$env:USERPROFILE\anaconda3\envs\unsloth_env\python.exe",
+    "C:\ProgramData\miniconda3\envs\unsloth_env\python.exe",
+    "C:\ProgramData\anaconda3\envs\unsloth_env\python.exe"
+)
+
+$PythonExe = $null
+foreach ($path in $UnslothEnvPaths) {
+    if (Test-Path $path) {
+        $PythonExe = $path
+        break
+    }
+}
+
+if (-not $PythonExe) {
+    Write-Host "  [ERROR] unsloth_env Python not found (needed to read config)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
+$DatasetPath = & $PythonExe -c $ConfigScript
+if (-not $DatasetPath) {
+    Write-Host "  [ERROR] Could not read dataset path from config" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
+Write-Host "  [OK] Dataset from config: $DatasetPath" -ForegroundColor Green
 Write-Host ""
 
 # ============================================================================
@@ -33,6 +82,7 @@ Write-Host "[2/6] Checking dataset..." -ForegroundColor Yellow
 
 if (-not (Test-Path $DatasetPath)) {
     Write-Host "  [ERROR] Dataset not found at $DatasetPath" -ForegroundColor Red
+    Write-Host "  [INFO] This path was read from configs/training_config.py" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
     exit 1
 }
@@ -62,36 +112,10 @@ Write-Host "  [OK] Disk space available: $FreeSpaceGB GB" -ForegroundColor Green
 Write-Host ""
 
 # ============================================================================
-# STEP 4: Find Python from unsloth_env
+# STEP 4: Verify Python (already found in step 1)
 # ============================================================================
-Write-Host "[4/6] Finding Python from unsloth_env..." -ForegroundColor Yellow
-
-$UnslothEnvPaths = @(
-    "$env:USERPROFILE\miniconda3\envs\unsloth_env\python.exe",
-    "$env:USERPROFILE\anaconda3\envs\unsloth_env\python.exe",
-    "C:\ProgramData\miniconda3\envs\unsloth_env\python.exe",
-    "C:\ProgramData\anaconda3\envs\unsloth_env\python.exe"
-)
-
-$PythonExe = $null
-foreach ($path in $UnslothEnvPaths) {
-    if (Test-Path $path) {
-        $PythonExe = $path
-        break
-    }
-}
-
-if (-not $PythonExe) {
-    Write-Host "  [ERROR] unsloth_env Python not found" -ForegroundColor Red
-    Write-Host "  [INFO] Searched in:" -ForegroundColor Yellow
-    foreach ($path in $UnslothEnvPaths) {
-        Write-Host "    - $path" -ForegroundColor Yellow
-    }
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-
-Write-Host "  [OK] Python found: $PythonExe" -ForegroundColor Green
+Write-Host "[4/6] Verifying Python environment..." -ForegroundColor Yellow
+Write-Host "  [OK] Python: $PythonExe" -ForegroundColor Green
 
 $PythonVersion = & $PythonExe --version 2>&1
 Write-Host "  [OK] Version: $PythonVersion" -ForegroundColor Green
@@ -114,16 +138,52 @@ Write-Host ""
 # ============================================================================
 Write-Host "[5/6] Training configuration..." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Model:           Mistral-7B-v0.3" -ForegroundColor White
+
+# Read config values from YAML
+$ConfigReadScript = @"
+import sys
+sys.path.insert(0, r'$TrainingDir')
+from configs.config_loader import get_7b_config
+config = get_7b_config()
+
+# Extract values
+model_name = config.model.model_name.split('/')[-1]  # Get just the model name part
+batch_size = config.training.per_device_train_batch_size
+grad_accum = config.training.gradient_accumulation_steps
+effective_batch = batch_size * grad_accum
+learning_rate = config.training.learning_rate
+epochs = config.training.num_train_epochs
+max_seq = config.training.max_seq_length
+
+# Print in PowerShell-parseable format
+print(f'MODEL={model_name}')
+print(f'BATCH_SIZE={batch_size}')
+print(f'GRAD_ACCUM={grad_accum}')
+print(f'EFFECTIVE_BATCH={effective_batch}')
+print(f'LEARNING_RATE={learning_rate}')
+print(f'EPOCHS={epochs}')
+print(f'MAX_SEQ={max_seq}')
+"@
+
+$ConfigValues = & $PythonExe -c $ConfigReadScript
+$ConfigDict = @{}
+foreach ($line in $ConfigValues) {
+    $parts = $line -split '=', 2
+    if ($parts.Count -eq 2) {
+        $ConfigDict[$parts[0]] = $parts[1]
+    }
+}
+
+# Get dataset filename
+$DatasetName = Split-Path $DatasetPath -Leaf
+
+Write-Host "  Model:           $($ConfigDict['MODEL'])" -ForegroundColor White
 Write-Host "  Method:          SFT (Supervised Fine-Tuning)" -ForegroundColor White
-Write-Host "  Dataset:         syngen_tools_sft_11.18.25.jsonl (2,676 examples)" -ForegroundColor White
-Write-Host "  Batch size:      6 (effective: 24 with grad accum)" -ForegroundColor White
-Write-Host "  Learning rate:   2e-4" -ForegroundColor White
-Write-Host "  Epochs:          3" -ForegroundColor White
-Write-Host "  Max seq length:  2048 tokens" -ForegroundColor White
-Write-Host ""
-Write-Host "  Expected time:   ~45 minutes (3 epochs × ~15 min/epoch)" -ForegroundColor Cyan
-Write-Host "  Expected VRAM:   ~7-9 GB" -ForegroundColor Cyan
+Write-Host "  Dataset:         $DatasetName" -ForegroundColor White
+Write-Host "  Batch size:      $($ConfigDict['BATCH_SIZE']) (effective: $($ConfigDict['EFFECTIVE_BATCH']) with grad accum)" -ForegroundColor White
+Write-Host "  Learning rate:   $($ConfigDict['LEARNING_RATE'])" -ForegroundColor White
+Write-Host "  Epochs:          $($ConfigDict['EPOCHS'])" -ForegroundColor White
+Write-Host "  Max seq length:  $($ConfigDict['MAX_SEQ']) tokens" -ForegroundColor White
 Write-Host ""
 
 # ============================================================================

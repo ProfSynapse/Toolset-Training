@@ -77,27 +77,60 @@ def upload_standard_model(
     print(f"Private: {private}")
     print()
 
-    # Load model and tokenizer
-    print("Loading model and tokenizer...")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_path,
-        max_seq_length=2048,
-        dtype=None,
-        load_in_4bit=True if "4bit" not in save_method else False,
-    )
+    # Check if we're on Windows filesystem (can cause I/O errors during save)
+    model_path_obj = Path(model_path).resolve()
+    is_windows_fs = str(model_path_obj).startswith('/mnt/')
 
-    # Upload
-    print(f"\nUploading to HuggingFace...")
-    model.push_to_hub_merged(
-        repo_id,
-        tokenizer,
-        save_method=save_method,
-        token=hf_token,
-        private=private
-    )
+    temp_dir = None
+    working_path = model_path
 
-    print(f"\n✓ Model uploaded successfully!")
-    print(f"View at: https://huggingface.co/{repo_id}")
+    if is_windows_fs:
+        print("⚠ Detected Windows filesystem (/mnt/c) - copying to WSL native filesystem for reliability...")
+        temp_dir = tempfile.mkdtemp(prefix='hf_upload_', dir=str(Path.home() / 'tmp'))
+        temp_model_path = Path(temp_dir) / 'model'
+        print(f"Copying model to: {temp_model_path}")
+        shutil.copytree(model_path, temp_model_path)
+        working_path = str(temp_model_path)
+        print("✓ Copy complete\n")
+
+    try:
+        # Change to WSL native directory to avoid I/O issues during merge
+        original_cwd = os.getcwd()
+        if temp_dir:
+            os.chdir(temp_dir)
+            print(f"Changed working directory to: {os.getcwd()}\n")
+
+        # Load model and tokenizer
+        print("Loading model and tokenizer...")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=working_path,
+            max_seq_length=2048,
+            dtype=None,
+            load_in_4bit=True if "4bit" not in save_method else False,
+        )
+
+        # Upload
+        print(f"\nUploading to HuggingFace...")
+        model.push_to_hub_merged(
+            repo_id,
+            tokenizer,
+            save_method=save_method,
+            token=hf_token,
+            private=private
+        )
+
+        print(f"\n✓ Model uploaded successfully!")
+        print(f"View at: https://huggingface.co/{repo_id}")
+
+        # Restore original directory
+        if temp_dir:
+            os.chdir(original_cwd)
+
+    finally:
+        # Clean up temp directory if we created one
+        if temp_dir and Path(temp_dir).exists():
+            print(f"\nCleaning up temporary directory: {temp_dir}")
+            shutil.rmtree(temp_dir)
 
 
 def create_gguf_versions(
