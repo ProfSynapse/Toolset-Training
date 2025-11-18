@@ -5,15 +5,18 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from .config import (
+    BackendType,
     EvaluatorConfig,
+    LMStudioSettings,
     OllamaSettings,
     PromptFilter,
     expand_path,
     parse_tags,
 )
+from .lmstudio_client import LMStudioClient
 from .ollama_client import OllamaClient
 from .prompt_sets import filter_prompts, load_prompt_cases
 from .reporting import build_run_payload, console_summary, render_markdown, write_json
@@ -21,8 +24,21 @@ from .runner import evaluate_cases
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate Claudesidian-MCP model responses via Ollama.")
-    parser.add_argument("--model", required=True, help="Ollama model name (e.g., claudesidian-mcp)")
+    parser = argparse.ArgumentParser(
+        description="Evaluate tool-calling models via Ollama or LM Studio.",
+        epilog="""
+Backend Configuration:
+  Ollama:    OLLAMA_HOST (default: 127.0.0.1), OLLAMA_PORT (default: 11434)
+  LM Studio: LMSTUDIO_HOST (default: 127.0.0.1), LMSTUDIO_PORT (default: 1234)
+        """,
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["ollama", "lmstudio"],
+        default="ollama",
+        help="Backend to use for evaluation (default: ollama)",
+    )
+    parser.add_argument("--model", required=True, help="Model name (e.g., claudesidian-mcp)")
     parser.add_argument("--prompt-set", default="Evaluator/prompts/baseline.json", help="Path to prompt set file")
     parser.add_argument("--tags", help="Comma-separated tag filter")
     parser.add_argument("--limit", type=int, help="Max prompts to evaluate")
@@ -30,13 +46,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--top-p", type=float, default=0.9)
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--seed", type=int, help="Optional generation seed")
-    parser.add_argument("--host", help="Override OLLAMA_HOST")
-    parser.add_argument("--port", type=int, help="Override OLLAMA_PORT")
+    parser.add_argument("--host", help="Override backend host (OLLAMA_HOST or LMSTUDIO_HOST)")
+    parser.add_argument("--port", type=int, help="Override backend port (OLLAMA_PORT or LMSTUDIO_PORT)")
     parser.add_argument("--retries", type=int, default=2, help="HTTP retry attempts")
     parser.add_argument("--timeout", type=float, default=60.0, help="Request timeout (seconds)")
     parser.add_argument("--output", help="Where to write JSON results (defaults to Evaluator/results/run_<ts>.json)")
     parser.add_argument("--markdown", help="Optional Markdown summary output path")
-    parser.add_argument("--dry-run", action="store_true", help="Skip Ollama calls (for smoke tests)")
+    parser.add_argument("--dry-run", action="store_true", help="Skip backend calls (for smoke tests)")
     return parser.parse_args(argv)
 
 
@@ -68,24 +84,37 @@ def main(argv: list[str] | None = None) -> int:
         print("No prompts matched the provided filters.", file=sys.stderr)
         return 1
 
+    # Build settings kwargs from CLI overrides
     settings_kwargs = {}
     if args.host:
         settings_kwargs["host"] = args.host
     if args.port:
         settings_kwargs["port"] = args.port
-    settings = OllamaSettings(
-        model=args.model,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        max_tokens=args.max_tokens,
-        seed=args.seed,
-        **settings_kwargs,
-    )
 
-    client = OllamaClient(settings=settings, timeout=config.request_timeout, retries=config.retries)
+    # Create backend-specific client
+    if args.backend == "lmstudio":
+        settings = LMStudioSettings(
+            model=args.model,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            max_tokens=args.max_tokens,
+            seed=args.seed,
+            **settings_kwargs,
+        )
+        client = LMStudioClient(settings=settings, timeout=config.request_timeout, retries=config.retries)
+    else:  # ollama
+        settings = OllamaSettings(
+            model=args.model,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            max_tokens=args.max_tokens,
+            seed=args.seed,
+            **settings_kwargs,
+        )
+        client = OllamaClient(settings=settings, timeout=config.request_timeout, retries=config.retries)
     records = evaluate_cases(selected_cases, client=client, dry_run=config.dry_run)
 
-    metadata = build_metadata(config, settings, len(cases), len(selected_cases))
+    metadata = build_metadata(config, settings, len(cases), len(selected_cases), args.backend)
     payload = build_run_payload(records, metadata=metadata)
     write_json(config.output_path, payload)
     print(console_summary(records))
@@ -110,11 +139,13 @@ def default_output_path() -> Path:
 
 def build_metadata(
     config: EvaluatorConfig,
-    settings: OllamaSettings,
+    settings: Union[OllamaSettings, LMStudioSettings],
     total_prompts: int,
     selected_prompts: int,
+    backend: str,
 ) -> Dict[str, Any]:
     return {
+        "backend": backend,
         "model": settings.model,
         "host": settings.host,
         "port": settings.port,

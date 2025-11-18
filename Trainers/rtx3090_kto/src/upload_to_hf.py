@@ -155,12 +155,36 @@ def create_gguf_versions(
             capture_output=True
         )
         print("Building llama.cpp...")
-        subprocess.run(
-            ["make", "-j"],
-            cwd=str(llamacpp_dir),
-            check=True,
-            capture_output=True
-        )
+
+        # Build using CMake on Windows, make on Linux/Mac
+        if sys.platform == 'win32':
+            print("  Using CMake for Windows build...")
+            build_dir = llamacpp_dir / "build"
+            build_dir.mkdir(exist_ok=True)
+
+            # Configure with CMake
+            subprocess.run(
+                ["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"],
+                cwd=str(build_dir),
+                check=True,
+                capture_output=True
+            )
+
+            # Build
+            subprocess.run(
+                ["cmake", "--build", ".", "--config", "Release"],
+                cwd=str(build_dir),
+                check=True,
+                capture_output=True
+            )
+        else:
+            # Use make on Linux/Mac
+            subprocess.run(
+                ["make", "-j"],
+                cwd=str(llamacpp_dir),
+                check=True,
+                capture_output=True
+            )
     print(f"✓ llama.cpp ready at: {llamacpp_dir}")
 
     # Convert to GGUF base format
@@ -181,12 +205,18 @@ def create_gguf_versions(
     print(f"\n[4/4] Creating {len(quantizations)} quantized versions...")
     gguf_files = [base_gguf]
 
+    # Find llama-quantize executable (different paths on Windows vs Linux)
+    if sys.platform == 'win32':
+        quantize_exe = llamacpp_dir / "build" / "bin" / "Release" / "llama-quantize.exe"
+    else:
+        quantize_exe = llamacpp_dir / "llama-quantize"
+
     for quant in quantizations:
         output_file = output_dir / f"model-unsloth-{quant}.gguf"
         print(f"  Creating {quant} quantization...")
 
         subprocess.run([
-            str(llamacpp_dir / "llama-quantize"),
+            str(quantize_exe),
             str(base_gguf),
             str(output_file),
             quant

@@ -1,17 +1,18 @@
 # Evaluator
 
-Evaluation harness for Claudesidian-MCP models served via [Ollama](https://ollama.com/). The Evaluator issues curated prompts, captures model replies, and validates tool-call structure using the same schema rules enforced in `tools/validate_syngen.py`.
+Evaluation harness for tool-calling models served via [Ollama](https://ollama.com/) or [LM Studio](https://lmstudio.ai/). The Evaluator issues curated prompts, captures model replies, and validates tool-call structure using the same schema rules enforced in `tools/validate_syngen.py`.
 
 ## Components
 
 | File | Purpose |
 | --- | --- |
-| `config.py` | Runtime configuration dataclasses + helpers (model name, host, prompt sets, limits). |
+| `config.py` | Runtime configuration dataclasses + helpers (model name, host, prompt sets, limits) for both Ollama and LM Studio backends. |
 | `ollama_client.py` | Minimal HTTP client for Ollama's `/api/chat` endpoint with retries and streaming hooks. |
+| `lmstudio_client.py` | Minimal HTTP client for LM Studio's OpenAI-compatible `/v1/chat/completions` endpoint. |
 | `prompt_sets.py` | Loader for JSON / JSONL prompt collections → `PromptCase` objects with tags and metadata. |
 | `schema_validator.py` | Thin wrapper that reuses the dataset validator to score a single assistant reply. |
 | `reporting.py` | Aggregates per-case results and produces JSON + Markdown summaries. |
-| `runner.py` | Core orchestration loop (load prompts, call Ollama, validate response). |
+| `runner.py` | Core orchestration loop (load prompts, call backend, validate response). |
 | `cli.py` | Command-line entry point (`python -m Evaluator.cli --prompt-set prompts/baseline.json`). |
 | `prompts/` | Baseline prompt sets (JSON arrays today, more formats later). |
 | `results/` | Run artifacts (`.json`, `.md`); `.gitkeep` placeholder retains the folder in git. |
@@ -19,6 +20,8 @@ Evaluation harness for Claudesidian-MCP models served via [Ollama](https://ollam
 ## Workflow
 
 > Requirements: Python 3.10+ and `requests` installed in your environment (`pip install requests`).
+
+### Option 1: Using Ollama (default)
 
 1. **Serve the model via Ollama**
    ```bash
@@ -31,10 +34,38 @@ Evaluation harness for Claudesidian-MCP models served via [Ollama](https://ollam
      --prompt-set Evaluator/prompts/baseline.json \
      --output Evaluator/results/run_$(date +%s).json
    ```
-3. **Inspect results**
-   - Console summary groups successes/failures by tag.
-   - JSON artifact contains raw prompts, responses, validator issues, runtime metadata.
-   - Optional Markdown export surfaces quick human-readable diffs.
+
+### Option 2: Using LM Studio
+
+1. **Load your model in LM Studio** and start the local server (default: `http://127.0.0.1:1234`)
+
+2. **Run the evaluator with LM Studio backend**
+   ```bash
+   python3 -m Evaluator.cli \
+     --backend lmstudio \
+     --model your-model-name \
+     --prompt-set Evaluator/prompts/baseline.json \
+     --output Evaluator/results/run_lmstudio_$(date +%s).json
+   ```
+
+### Backend Configuration
+
+Both backends support environment variables and CLI overrides:
+
+**Ollama:**
+- Environment: `OLLAMA_HOST` (default: 127.0.0.1), `OLLAMA_PORT` (default: 11434)
+- CLI overrides: `--host`, `--port`
+
+**LM Studio:**
+- Environment: `LMSTUDIO_HOST` (default: 127.0.0.1), `LMSTUDIO_PORT` (default: 1234)
+- CLI overrides: `--host`, `--port`
+
+### Inspecting Results
+
+- Console summary groups successes/failures by tag.
+- JSON artifact contains raw prompts, responses, validator issues, runtime metadata.
+- Optional Markdown export surfaces quick human-readable diffs.
+- Use `--markdown <path>` to generate a Markdown summary.
 
 ## Prompt Set Format
 
@@ -61,4 +92,7 @@ Evaluation harness for Claudesidian-MCP models served via [Ollama](https://ollam
 
 - Add new prompt files under `Evaluator/prompts/`.
 - Implement richer reporters (CSV, HTML) by extending `reporting.py`.
-- Plug different backends (OpenAI, vLLM) by implementing the same interface as `OllamaClient`.
+- Add additional backends by implementing the same `.chat()` interface as `OllamaClient` and `LMStudioClient`:
+  - The client must accept a `Sequence[Mapping[str, str]]` of messages
+  - Return an object with `.message` (str), `.raw` (dict), and `.latency_s` (float) attributes
+  - Update `runner.py` type hints to include the new client type

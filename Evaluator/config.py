@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Literal, Optional, Sequence
 
 
 def _env_host() -> str:
@@ -35,6 +35,40 @@ class OllamaSettings:
 
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
+
+
+def _env_lmstudio_host() -> str:
+    return os.getenv("LMSTUDIO_HOST", "127.0.0.1")
+
+
+def _env_lmstudio_port() -> int:
+    raw = os.getenv("LMSTUDIO_PORT")
+    if raw is None:
+        return 1234
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("LMSTUDIO_PORT must be an integer") from exc
+
+
+@dataclass
+class LMStudioSettings:
+    """Connection + generation parameters for LM Studio."""
+
+    model: str
+    host: str = field(default_factory=_env_lmstudio_host)
+    port: int = field(default_factory=_env_lmstudio_port)
+    temperature: float = 0.2
+    top_p: float = 0.9
+    max_tokens: int = 1024
+    seed: Optional[int] = None
+
+    def base_url(self) -> str:
+        return f"http://{self.host}:{self.port}"
+
+
+# Backend type for client selection
+BackendType = Literal["ollama", "lmstudio"]
 
 
 @dataclass

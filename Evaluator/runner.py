@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
-from .ollama_client import OllamaClient, OllamaResponse
+from .lmstudio_client import LMStudioClient
+from .ollama_client import OllamaClient
 from .prompt_sets import PromptCase
 from .schema_validator import ValidationResult, validate_assistant_response
 
@@ -25,7 +26,7 @@ class EvaluationRecord:
 
 def evaluate_cases(
     cases: Sequence[PromptCase],
-    client: OllamaClient,
+    client: Union[OllamaClient, LMStudioClient],
     dry_run: bool = False,
 ) -> List[EvaluationRecord]:
     """Run evaluation for the provided prompts."""
