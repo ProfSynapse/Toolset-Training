@@ -63,7 +63,7 @@ from trl import KTOConfig, KTOTrainer
 # Import custom KTO-S trainer (with SIGN correction)
 from src.kto_s_trainer import KTOSTrainer
 
-from configs.training_config import (
+from configs.config_loader import (
     Config,
     get_3b_config,
     get_7b_config,

@@ -46,7 +46,10 @@
       "Bash(test:*)",
       "Bash(cmake:*)",
       "Bash(/mnt/c/Users/Joseph/Documents/Code/Toolset-Training/Trainers/rtx3090_kto/gguf_output/llama.cpp/build/bin/llama-quantize:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "Read(//mnt/wsl/**)",
+      "Read(//mnt/c/Users/Joseph/Documents/Code/Toolset-Training/Trainers/rtx3090_sft/**)"
     ],
     "deny": [],
     "ask": []

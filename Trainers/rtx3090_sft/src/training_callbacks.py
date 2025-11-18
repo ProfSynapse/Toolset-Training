@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Custom training callbacks for KTO fine-tuning.
+Custom training callbacks for SFT fine-tuning.
 Provides real-time metrics tracking and pretty table output.
 """
 
@@ -18,7 +18,7 @@ class MetricsTableCallback(TrainerCallback):
     Shows metrics every N steps to track training progress.
     """
 
-    def __init__(self, log_every_n_steps: int = 5, output_dir: str = "./kto_output_rtx3090",
+    def __init__(self, log_every_n_steps: int = 5, output_dir: str = "./sft_output_rtx3090",
                  previous_log_entries: list = None):
         """
         Args:
@@ -110,10 +110,8 @@ class MetricsTableCallback(TrainerCallback):
         # Extract metrics from logs
         loss = logs.get('loss', 0.0)
         learning_rate = logs.get('learning_rate', 0.0)
-        kto_chosen = logs.get('rewards/chosen', 0.0)
-        kto_rejected = logs.get('rewards/rejected', 0.0)
-        kto_margin = logs.get('rewards/margins', 0.0)
-        kl_div = logs.get('logps/rejected', 0.0)  # KL divergence approximation
+        grad_norm = logs.get('grad_norm', 0.0)
+        epoch = logs.get('epoch', 0.0)
 
         # Calculate ETA
         if state.max_steps > 0:
@@ -125,10 +123,10 @@ class MetricsTableCallback(TrainerCallback):
             eta = "N/A"
             progress = f"{state.global_step}"
 
-        # Print table row
+        # Print table row (SFT-specific metrics)
         print(f" {progress:>12} | {loss:>8.4f} | {learning_rate:>9.2e} | "
-              f"{kto_chosen:>6.3f} | {kto_rejected:>6.3f} | {kto_margin:>6.3f} | "
-              f"{gpu_mem:>8} | {interval_time:>7.1f}s | {samples_per_sec:>8.1f} | {eta:>9} ")
+              f"{grad_norm:>8.3f} | {epoch:>6.2f} | {gpu_mem:>8} | "
+              f"{interval_time:>7.1f}s | {samples_per_sec:>8.1f} | {eta:>9} ")
 
     def _save_metrics_to_file(self, logs: Dict[str, Any], step: int, interval_time: float):
         """Save detailed metrics to JSONL file."""
@@ -158,24 +156,13 @@ class MetricsTableCallback(TrainerCallback):
         print(f"  Steps included: 0-{previous_entries[-1]['step'] if previous_entries else 0}\n")
 
     def _check_training_health(self, logs: Dict[str, Any], step: int, max_grad_norm: float = None):
-        """Check if training metrics are healthy and warn if not."""
+        """Check if training metrics are healthy and warn if not (SFT-specific checks)."""
         warnings = []
 
         # Check for NaN or Inf
         loss = logs.get('loss', 0.0)
         if not (0 < loss < 100):  # Loss should be positive and reasonable
             warnings.append(f"⚠ Unusual loss value: {loss:.4f}")
-
-        # Check KTO margins (should be positive and increasing over time)
-        margin = logs.get('rewards/margins', 0.0)
-        if margin < -1.0:  # Very negative margin is bad
-            warnings.append(f"⚠ Very negative margin: {margin:.4f} (chosen model may be worse than reference)")
-
-        # Check for reward collapse (both chosen and rejected near zero)
-        chosen = logs.get('rewards/chosen', 0.0)
-        rejected = logs.get('rewards/rejected', 0.0)
-        if abs(chosen) < 0.001 and abs(rejected) < 0.001 and step > 10:
-            warnings.append("⚠ Reward collapse detected (both rewards near zero)")
 
         # Check gradient norm (show both raw and clipped values)
         grad_norm = logs.get('grad_norm', 0.0)
@@ -187,6 +174,12 @@ class MetricsTableCallback(TrainerCallback):
                 )
             else:
                 warnings.append(f"⚠ High gradient norm: {grad_norm:.2f} (may cause instability)")
+
+        # Check if loss is not decreasing (compare to first few steps)
+        if step > 50:  # After warm-up
+            # This is a basic check - in production you'd track loss history
+            if loss > 2.0:  # Still high after 50 steps
+                warnings.append(f"⚠ Loss remains high after {step} steps: {loss:.4f} (may need longer training or LR adjustment)")
 
         # Print warnings if any
         if warnings:
@@ -220,7 +213,7 @@ class MetricsTableCallback(TrainerCallback):
         print("\n" + "=" * 110)
         print(" " * 47 + "TRAINING METRICS")
         print("=" * 110)
-        print("   Step      |   Loss   |    LR     | Chosen | Reject | Margin | GPU Mem  | Time/5s | Samp/sec |    ETA    ")
+        print("   Step      |   Loss   |    LR     | GradNorm | Epoch  | GPU Mem  | Time/5s | Samp/sec |    ETA    ")
         print("-" * 110)
 
     def _format_time(self, seconds: float) -> str:

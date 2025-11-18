@@ -14,16 +14,65 @@ Write-Host "====================================================================
 Write-Host ""
 
 # ============================================================================
-# STEP 1: Navigate to training directory
+# STEP 1: Navigate to training directory and load config
 # ============================================================================
-Write-Host "[1/6] Navigating to training directory..." -ForegroundColor Yellow
+Write-Host "[1/6] Loading configuration..." -ForegroundColor Yellow
 
-$ProjectRoot = "C:\Users\Joseph\Documents\Code\Toolset-Training"
-$TrainingDir = Join-Path $ProjectRoot "Trainers\rtx3090_kto"
-$DatasetPath = Join-Path $ProjectRoot "Datasets\syngen_tools_11.14.25.jsonl"
-
+# Get script directory (should be Trainers/rtx3090_kto)
+$TrainingDir = $PSScriptRoot
 Set-Location $TrainingDir
-Write-Host "  [OK] Current directory: $TrainingDir" -ForegroundColor Green
+
+# Find project root (two levels up from training dir)
+$ProjectRoot = (Get-Item $TrainingDir).Parent.Parent.FullName
+
+Write-Host "  [OK] Training directory: $TrainingDir" -ForegroundColor Green
+Write-Host "  [OK] Project root: $ProjectRoot" -ForegroundColor Green
+
+# Read dataset path from YAML config using Python
+$ConfigScript = @"
+import sys
+sys.path.insert(0, r'$TrainingDir')
+from configs.config_loader import get_7b_config
+config = get_7b_config()
+# Resolve relative path to absolute
+import os
+if config.dataset.local_file:
+    dataset_path = os.path.normpath(os.path.join(r'$TrainingDir', config.dataset.local_file))
+    print(dataset_path)
+else:
+    print(f'{config.dataset.dataset_name}/{config.dataset.dataset_file}')
+"@
+
+# Find Python first (will do this in next step but need it now for config)
+$UnslothEnvPaths = @(
+    "$env:USERPROFILE\miniconda3\envs\unsloth_env\python.exe",
+    "$env:USERPROFILE\anaconda3\envs\unsloth_env\python.exe",
+    "C:\ProgramData\miniconda3\envs\unsloth_env\python.exe",
+    "C:\ProgramData\anaconda3\envs\unsloth_env\python.exe"
+)
+
+$PythonExe = $null
+foreach ($path in $UnslothEnvPaths) {
+    if (Test-Path $path) {
+        $PythonExe = $path
+        break
+    }
+}
+
+if (-not $PythonExe) {
+    Write-Host "  [ERROR] unsloth_env Python not found (needed to read config)" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
+$DatasetPath = & $PythonExe -c $ConfigScript
+if (-not $DatasetPath) {
+    Write-Host "  [ERROR] Could not read dataset path from config" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
+Write-Host "  [OK] Dataset from config: $DatasetPath" -ForegroundColor Green
 Write-Host ""
 
 # ============================================================================
@@ -62,36 +111,10 @@ Write-Host "  [OK] Disk space available: $FreeSpaceGB GB" -ForegroundColor Green
 Write-Host ""
 
 # ============================================================================
-# STEP 4: Find Python from unsloth_env
+# STEP 4: Verify Python environment (already found in step 1)
 # ============================================================================
-Write-Host "[4/6] Finding Python from unsloth_env..." -ForegroundColor Yellow
-
-$UnslothEnvPaths = @(
-    "$env:USERPROFILE\miniconda3\envs\unsloth_env\python.exe",
-    "$env:USERPROFILE\anaconda3\envs\unsloth_env\python.exe",
-    "C:\ProgramData\miniconda3\envs\unsloth_env\python.exe",
-    "C:\ProgramData\anaconda3\envs\unsloth_env\python.exe"
-)
-
-$PythonExe = $null
-foreach ($path in $UnslothEnvPaths) {
-    if (Test-Path $path) {
-        $PythonExe = $path
-        break
-    }
-}
-
-if (-not $PythonExe) {
-    Write-Host "  [ERROR] unsloth_env Python not found" -ForegroundColor Red
-    Write-Host "  [INFO] Searched in:" -ForegroundColor Yellow
-    foreach ($path in $UnslothEnvPaths) {
-        Write-Host "    - $path" -ForegroundColor Yellow
-    }
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-
-Write-Host "  [OK] Python found: $PythonExe" -ForegroundColor Green
+Write-Host "[4/6] Verifying Python environment..." -ForegroundColor Yellow
+Write-Host "  [OK] Python: $PythonExe" -ForegroundColor Green
 
 $PythonVersion = & $PythonExe --version 2>&1
 Write-Host "  [OK] Version: $PythonVersion" -ForegroundColor Green
@@ -113,56 +136,95 @@ if ($CudaTest -match "CUDA:True") {
 Write-Host ""
 
 # ============================================================================
-# STEP 5: Show configuration summary
+# STEP 5: Display training configuration
 # ============================================================================
-Write-Host "[5/6] Training Configuration:" -ForegroundColor Yellow
-Write-Host "  Model: Qwen 2.5 3B Instruct" -ForegroundColor Cyan
-Write-Host "  Dataset: syngen_tools_11.14.25.jsonl (4652 examples)" -ForegroundColor Cyan
-Write-Host "  Batch size: 4 x 4 accum = 16 effective" -ForegroundColor Cyan
-Write-Host "  Learning rate: 5e-7" -ForegroundColor Cyan
-Write-Host "  Epochs: 2" -ForegroundColor Cyan
-Write-Host "  Estimated steps: ~582" -ForegroundColor Cyan
-Write-Host "  Estimated time: ~1.5-2 hours" -ForegroundColor Cyan
+Write-Host "[5/6] Training configuration..." -ForegroundColor Yellow
 Write-Host ""
 
-$Confirmation = Read-Host "Ready to start training? [Y/n]"
-if ($Confirmation -eq "n" -or $Confirmation -eq "N") {
-    Write-Host "  Cancelled by user." -ForegroundColor Yellow
+# Read config values from YAML
+$ConfigReadScript = @"
+import sys
+sys.path.insert(0, r'$TrainingDir')
+from configs.config_loader import get_7b_config
+config = get_7b_config()
+
+# Extract values
+model_name = config.model.model_name.split('/')[-1]  # Get just the model name part
+batch_size = config.training.per_device_train_batch_size
+grad_accum = config.training.gradient_accumulation_steps
+effective_batch = batch_size * grad_accum
+learning_rate = config.training.learning_rate
+epochs = config.training.num_train_epochs
+max_length = config.training.max_length
+beta = config.training.beta
+
+# Print in PowerShell-parseable format
+print(f'MODEL={model_name}')
+print(f'BATCH_SIZE={batch_size}')
+print(f'GRAD_ACCUM={grad_accum}')
+print(f'EFFECTIVE_BATCH={effective_batch}')
+print(f'LEARNING_RATE={learning_rate}')
+print(f'EPOCHS={epochs}')
+print(f'MAX_LENGTH={max_length}')
+print(f'BETA={beta}')
+"@
+
+$ConfigValues = & $PythonExe -c $ConfigReadScript
+$ConfigDict = @{}
+foreach ($line in $ConfigValues) {
+    $parts = $line -split '=', 2
+    if ($parts.Count -eq 2) {
+        $ConfigDict[$parts[0]] = $parts[1]
+    }
+}
+
+# Get dataset filename
+$DatasetName = Split-Path $DatasetPath -Leaf
+
+Write-Host "  Model:           $($ConfigDict['MODEL'])" -ForegroundColor White
+Write-Host "  Method:          KTO (Preference Learning)" -ForegroundColor White
+Write-Host "  Dataset:         $DatasetName" -ForegroundColor White
+Write-Host "  Batch size:      $($ConfigDict['BATCH_SIZE']) (effective: $($ConfigDict['EFFECTIVE_BATCH']) with grad accum)" -ForegroundColor White
+Write-Host "  Learning rate:   $($ConfigDict['LEARNING_RATE'])" -ForegroundColor White
+Write-Host "  Beta:            $($ConfigDict['BETA'])" -ForegroundColor White
+Write-Host "  Epochs:          $($ConfigDict['EPOCHS'])" -ForegroundColor White
+Write-Host "  Max seq length:  $($ConfigDict['MAX_LENGTH']) tokens" -ForegroundColor White
+Write-Host ""
+
+# ============================================================================
+# STEP 6: Confirm and run training
+# ============================================================================
+Write-Host "[6/6] Ready to start training" -ForegroundColor Yellow
+Write-Host ""
+$Confirmation = Read-Host "Start training? (y/n)"
+
+if ($Confirmation -ne "y" -and $Confirmation -ne "Y") {
+    Write-Host "Training cancelled." -ForegroundColor Yellow
     exit 0
 }
 
 Write-Host ""
-
-# ============================================================================
-# STEP 6: Run training
-# ============================================================================
-Write-Host "[6/6] Starting training..." -ForegroundColor Yellow
-Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "Training output below:" -ForegroundColor Cyan
+Write-Host "STARTING TRAINING" -ForegroundColor Cyan
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Run training with local dataset file
-& $PythonExe train_kto.py --local-file "..\..\Datasets\syngen_tools_11.14.25.jsonl"
+# Run training with local dataset
+& $PythonExe train_kto.py `
+    --model-size 7b `
+    --local-file $DatasetPath
 
 $ExitCode = $LASTEXITCODE
 
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Cyan
-
 if ($ExitCode -eq 0) {
-    Write-Host "[SUCCESS] Training completed successfully!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Yellow
-    Write-Host "  1. Check output in: kto_output_rtx3090\" -ForegroundColor Cyan
-    Write-Host "  2. Review training logs for metrics" -ForegroundColor Cyan
-    Write-Host "  3. Upload to HuggingFace and test with evaluator" -ForegroundColor Cyan
+    Write-Host "TRAINING COMPLETED SUCCESSFULLY" -ForegroundColor Green
 } else {
-    Write-Host "[ERROR] Training failed with exit code: $ExitCode" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Check the error messages above for details." -ForegroundColor Yellow
+    Write-Host "TRAINING FAILED (Exit code: $ExitCode)" -ForegroundColor Red
 }
-
+Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
+
 Read-Host "Press Enter to exit"
+exit $ExitCode

@@ -61,7 +61,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from unsloth import is_bfloat16_supported
 from trl import SFTConfig, SFTTrainer
 
-from configs.training_config import (
+from configs.config_loader import (
     Config,
     get_3b_config,
     get_7b_config,

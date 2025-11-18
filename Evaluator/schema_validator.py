@@ -3,8 +3,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+import sys
+from pathlib import Path
 
-from tools import validate_syngen as dataset_validator
+# Add tools directory to path
+tools_dir = Path(__file__).parent.parent / 'tools'
+if str(tools_dir) not in sys.path:
+    sys.path.insert(0, str(tools_dir))
+
+import validate_syngen as dataset_validator
 
 
 @dataclass

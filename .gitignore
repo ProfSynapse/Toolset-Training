@@ -79,3 +79,5 @@ conversation_analysis_*.txt
 # Converted datasets (keep originals tracked)
 claude_conversations_chatml.jsonl
 personal conversations/
+sft_output_rtx3090/
+results/
