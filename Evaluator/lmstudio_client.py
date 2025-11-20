@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 import requests
 
@@ -53,6 +53,24 @@ class LMStudioClient:
                 time.sleep(min(2 ** attempt, 5))
         raise LMStudioError(f"LM Studio request failed after {self.retries + 1} attempts: {last_err}")
 
+    def list_models(self) -> List[str]:
+        """Return the list of model IDs exposed by the LM Studio server."""
+        url = f"{self.settings.base_url()}/v1/models"
+        last_err: Exception | None = None
+
+        for attempt in range(self.retries + 1):
+            try:
+                response = requests.get(url, timeout=self.timeout)
+                response.raise_for_status()
+                data = response.json()
+                return self._extract_models(data)
+            except (requests.RequestException, ValueError, LMStudioError) as exc:
+                last_err = exc
+                if attempt == self.retries:
+                    break
+                time.sleep(min(2 ** attempt, 5))
+        raise LMStudioError(f"Unable to list LM Studio models after {self.retries + 1} attempts: {last_err}")
+
     def _build_payload(self, messages: Sequence[Mapping[str, str]]) -> Dict[str, Any]:
         payload = {
             "model": self.settings.model,
@@ -80,3 +98,19 @@ class LMStudioClient:
         if not isinstance(content, str):
             raise LMStudioError("LM Studio response missing 'choices[0].message.content'")
         return content
+
+    @staticmethod
+    def _extract_models(payload: Mapping[str, Any]) -> List[str]:
+        data = payload.get("data")
+        if not isinstance(data, list):
+            raise LMStudioError(f"Unexpected LM Studio model list payload: {json.dumps(payload)[:200]}")
+
+        models: List[str] = []
+        for entry in data:
+            model_id = entry.get("id") if isinstance(entry, Mapping) else None
+            if isinstance(model_id, str):
+                models.append(model_id)
+
+        if not models:
+            raise LMStudioError("LM Studio returned no models")
+        return models

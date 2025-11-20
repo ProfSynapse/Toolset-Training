@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 from .lmstudio_client import LMStudioClient
 from .ollama_client import OllamaClient
@@ -28,13 +28,14 @@ def evaluate_cases(
     cases: Sequence[PromptCase],
     client: Union[OllamaClient, LMStudioClient],
     dry_run: bool = False,
+    on_record: Callable[[EvaluationRecord], None] | None = None,
 ) -> List[EvaluationRecord]:
     """Run evaluation for the provided prompts."""
     records: List[EvaluationRecord] = []
     for case in cases:
         if dry_run:
             records.append(
-                EvaluationRecord(
+                record := EvaluationRecord(
                     case=case,
                     response_text=None,
                     validator=None,
@@ -43,13 +44,15 @@ def evaluate_cases(
                     error=None,
                 )
             )
+            if on_record:
+                on_record(record)
             continue
 
         try:
             response = client.chat(case.chat_messages())
         except Exception as exc:  # pylint: disable=broad-exception-caught
             records.append(
-                EvaluationRecord(
+                record := EvaluationRecord(
                     case=case,
                     response_text=None,
                     validator=None,
@@ -58,6 +61,8 @@ def evaluate_cases(
                     error=str(exc),
                 )
             )
+            if on_record:
+                on_record(record)
             continue
 
         try:
@@ -65,7 +70,7 @@ def evaluate_cases(
         except Exception as exc:  # pylint: disable=broad-exception-caught
             # Validation failed - record the error but continue evaluation
             records.append(
-                EvaluationRecord(
+                record := EvaluationRecord(
                     case=case,
                     response_text=response.message,
                     validator=None,
@@ -74,6 +79,8 @@ def evaluate_cases(
                     error=f"Validation error: {exc}",
                 )
             )
+            if on_record:
+                on_record(record)
             continue
 
         # Check if expected tools were actually called
@@ -92,7 +99,7 @@ def evaluate_cases(
                 )
 
         records.append(
-            EvaluationRecord(
+            record := EvaluationRecord(
                 case=case,
                 response_text=response.message,
                 validator=validator_result,
@@ -101,4 +108,6 @@ def evaluate_cases(
                 error=None,
             )
         )
+        if on_record:
+            on_record(record)
     return records
