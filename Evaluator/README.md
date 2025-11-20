@@ -96,3 +96,24 @@ Both backends support environment variables and CLI overrides:
   - The client must accept a `Sequence[Mapping[str, str]]` of messages
   - Return an object with `.message` (str), `.raw` (dict), and `.latency_s` (float) attributes
   - Update `runner.py` type hints to include the new client type
+
+## LM Studio helper CLI
+
+Prefer a purpose-built helper for LM Studio runs:
+
+- List hosted models:  
+  `python -m Evaluator.lmstudio_cli list-models`
+- Run the full coverage suite (defaults to `prompts/full_coverage.json`):  
+  `python -m Evaluator.lmstudio_cli run --model <model-id>`
+
+Artifacts are written to `Evaluator/results/<model>_full_coverage_<timestamp>.json` and `.md`. If `--model` is omitted, the CLI will prompt you to choose from the models reported by LM Studio.
+
+## One-command interactive flow
+
+For the simplest path, just run:
+
+```bash
+python evaluator
+```
+
+You'll get a short prompt to pick a model (auto-listed from LM Studio) and how many times to run the full-coverage suite. Everything else is automatic—the run(s) will save JSON and Markdown artifacts under `Evaluator/results/` with the model name and timestamp.
