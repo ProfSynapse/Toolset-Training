@@ -62,11 +62,11 @@ from unsloth import is_bfloat16_supported
 from trl import SFTConfig, SFTTrainer
 
 from configs.config_loader import (
-    Config,
     get_3b_config,
     get_7b_config,
     get_13b_config,
-    get_20b_config
+    get_20b_config,
+    load_config,
 )
 from src.data_loader import load_and_prepare_dataset, print_dataset_samples
 from src.model_loader import (
@@ -124,7 +124,7 @@ def extract_previous_log_entries(checkpoint_path: str):
     return entries if entries else None
 
 
-def parse_args():
+def parse_args(argv=None):
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="SFT Training for RTX 3090")
 
@@ -174,12 +174,19 @@ def parse_args():
     parser.add_argument("--hf-token", type=str,
                        help="HuggingFace API token (or set HF_TOKEN env var)")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
-    """Main training function."""
-    args = parse_args()
+def run(args: argparse.Namespace):
+    """Execute training with the provided CLI arguments."""
+    run_metadata = {
+        "train_size": None,
+        "eval_size": None,
+        "run_dir": None,
+        "final_model_dir": None,
+        "logs_dir": None,
+        "config_path": args.config,
+    }
 
     # Load configuration
     if args.config:
@@ -202,9 +209,9 @@ def main():
             config = get_20b_config()
         print(f"Using {args.model_size.upper()} preset configuration")
     else:
-        # Default configuration
-        config = Config()
-        print("Using default configuration")
+        # Default configuration (YAML)
+        config = load_config()
+        print("Using default YAML configuration")
 
     # Apply CLI overrides
     if args.batch_size:
@@ -256,6 +263,13 @@ def main():
     print(f"Training run directory: {run_dir}")
     print(f"  Checkpoints: {checkpoints_dir}")
     print(f"  Logs: {logs_dir}\n")
+    run_metadata.update(
+        {
+            "run_dir": str(run_dir),
+            "final_model_dir": str(run_dir / "final_model"),
+            "logs_dir": str(logs_dir),
+        }
+    )
 
     # Load dataset
     train_dataset, eval_dataset = load_and_prepare_dataset(
@@ -267,6 +281,8 @@ def main():
         split_dataset=args.split_dataset or config.dataset.split_dataset,
         filter_desirable=config.dataset.filter_desirable
     )
+    run_metadata["train_size"] = len(train_dataset)
+    run_metadata["eval_size"] = len(eval_dataset) if eval_dataset else None
 
     # Print samples
     print_dataset_samples(train_dataset, num_samples=2)
@@ -364,7 +380,7 @@ def main():
 
     if args.dry_run:
         print("✓ Dry run completed. Exiting without training.")
-        return
+        return run_metadata
 
     # Extract previous log entries if resuming from checkpoint
     previous_log_entries = None
@@ -421,6 +437,13 @@ def main():
     # Final GPU memory check
     print()
     check_gpu_memory()
+    return run_metadata
+
+
+def main(argv=None):
+    """Main training function."""
+    args = parse_args(argv)
+    run(args)
 
 
 if __name__ == "__main__":
