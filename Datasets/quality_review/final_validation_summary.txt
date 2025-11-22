@@ -1,0 +1,13 @@
+Line 737 (True): Invalid tool name: m
+Line 767 (True): Invalid tool name: v
+Line 799 (True): Invalid tool name: v
+Line 827 (True): Invalid tool name: c
+Line 833 (True): Invalid tool name: a
+
+=== Quick Validation Summary ===
+Total examples: 7361
+Passed: 7346 (99.8%)
+Failed (True/improved): 15
+Failed (False/poor): 0
+
+True examples validation rate: 99.6%
