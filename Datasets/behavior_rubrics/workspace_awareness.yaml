@@ -1,0 +1,160 @@
+# Workspace Awareness Behavior Rubric
+# Model leverages workspace metadata and follows workspace workflows
+
+behavior_name: workspace_awareness
+category: context_and_structure
+priority: low_medium
+version: 1.0
+
+description: |
+  Model demonstrates workspace awareness by:
+  - Loading workspace data before workspace-specific operations
+  - Referencing workspace structure, workflows, and keyFiles
+  - Following workspace-defined workflows
+  - Using workspace preferences
+  - Maintaining workspace context across operations
+
+positive_indicators:
+  tool_patterns:
+    workspace_loading:
+      - "memoryManager_loadWorkspace before workspace-specific operations"
+      - "Uses workspace data to inform decisions"
+      - "References workspace keyFiles, workflows, preferences"
+
+    workflow_following:
+      - "Follows workspace-defined workflow steps"
+      - "References workflow names in context"
+      - "Executes workflow steps in correct order"
+
+    workspace_updates:
+      - "memoryManager_updateWorkspace after significant changes"
+      - "Updates workspace state/context"
+      - "Maintains workspace metadata"
+
+  context_patterns:
+    sessionMemory:
+      - "References workspace context: 'Budget workspace tracks monthly expenses'"
+      - "Mentions workspace structure: 'Per workspace keyFiles, checking Budget/Current/'"
+      - "Notes workspace state: 'Workspace shows 30% spent at 33% elapsed'"
+      - "Follows workflows: 'Following workspace monthly-review workflow'"
+
+    toolContext:
+      - "Explains workspace rationale: 'Using workspace-defined quarterly-review workflow'"
+      - "References preferences: 'Workspace prefers append over replace for changelog'"
+      - "Shows workflow position: 'Step 2 of expense-tracking workflow'"
+
+    goals:
+      primaryGoal: "Aligns with workspace purpose"
+      subgoal: "Follows workflow step sequence"
+
+  parameter_patterns:
+    workspace_informed:
+      - "workspaceId: consistently from loaded workspace"
+      - "Paths align with workspace directoryStructure"
+      - "Operations follow workspace workflows"
+      - "File references match workspace keyFiles"
+
+negative_indicators:
+  tool_patterns:
+    antipatterns:
+      - "Ignores available workspace data"
+      - "Doesn't load workspace when workspace-specific operation"
+      - "Generic operations when workspace workflows available"
+      - "Incorrect workspaceId in context"
+      - "Creates workspace-specific files outside workspace folder"
+
+  context_patterns:
+    sessionMemory:
+      - "No reference to workspace structure"
+      - "Doesn't acknowledge workspace workflows"
+      - "Generic approach ignoring workspace context"
+      - "Wrong workspaceId"
+
+    toolContext:
+      - "Doesn't mention workspace"
+      - "Ignores workspace preferences"
+      - "No workflow reference when applicable"
+
+  parameter_patterns:
+    - "workspaceId missing or incorrect"
+    - "Paths don't follow workspace structure"
+    - "Ignores workspace-defined file locations"
+
+trigger_scenarios:
+  - type: workspace_folder_operations
+    conditions:
+      - "Operations within defined workspace root folders"
+      - "File paths matching workspace structure"
+      - "Working with workspace keyFiles"
+
+  - type: workflow_execution
+    examples:
+      - "Follow the monthly review process"
+      - "Execute the project setup workflow"
+      - "Complete the backup procedure"
+
+  - type: workspace_specific_requests
+    examples:
+      - "Update my budget tracking"
+      - "Check the podcast content calendar"
+      - "Review the pet health records"
+
+  - type: structured_workspace_tasks
+    conditions:
+      - "Task matches workspace purpose"
+      - "Workspace has defined workflows"
+      - "Workspace has specific keyFiles for this task"
+
+example_user_requests:
+  - "Show me my budget status for this month"
+  - "Plan the next podcast episode"
+  - "Check when Max's vaccines are due"
+  - "Update my project progress tracker"
+  - "Follow the research paper workflow"
+
+metrics:
+  workspace_loading_rate:
+    description: "Percentage of workspace operations preceded by loadWorkspace"
+    target: ">70%"
+    measurement: "Count (loadWorkspace before workspace op) / workspace operations"
+
+  workflow_adherence:
+    description: "Percentage following defined workflows when applicable"
+    target: ">80%"
+    measurement: "Count (follows workflow) / tasks with applicable workflows"
+
+  context_accuracy:
+    description: "Percentage using correct workspaceId"
+    target: ">95%"
+    measurement: "Count (correct workspaceId) / workspace operations"
+
+  structure_alignment:
+    description: "Paths align with workspace directoryStructure"
+    target: ">90%"
+    measurement: "Count (correct paths) / file operations in workspace"
+
+target_volume:
+  pairs: 60-120
+  total_examples: 120-240
+  quality_threshold: "4-5/5 average quality score"
+
+notes: |
+  Workspace awareness enables structured, organized tool use within defined contexts.
+  While lower priority than safety behaviors, it significantly improves user experience
+  for users who create workspaces.
+
+  Workspaces provide:
+  1. Purpose and context (why this folder exists)
+  2. Workflows (how to complete common tasks)
+  3. keyFiles (important files for quick reference)
+  4. Preferences (user's preferred approaches)
+  5. directoryStructure (folder organization)
+
+  Benefits of workspace awareness:
+  - Organized operations following user's structure
+  - Workflow guidance for complex tasks
+  - Context preservation (workspace state)
+  - Reduced need for user to specify paths/files
+
+  Common failure mode: Treating workspace folders like generic folders.
+  Desired behavior: Leveraging workspace metadata for structured operations.

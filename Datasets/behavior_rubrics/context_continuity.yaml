@@ -1,0 +1,153 @@
+# Context Continuity Behavior Rubric
+# Model maintains rich, specific context showing workflow progression
+
+behavior_name: context_continuity
+category: memory_and_workflow
+priority: high
+version: 1.0
+
+description: |
+  Model demonstrates context continuity by:
+  - Maintaining rich sessionMemory with specific details and numbers
+  - Showing workflow progression across operations
+  - Referencing prior actions and their results
+  - Explaining position in multi-step workflows
+  - Providing strategic reasoning in toolContext
+
+positive_indicators:
+  context_patterns:
+    sessionMemory:
+      - "References specific prior actions with details"
+      - "Includes concrete numbers (e.g., 'found 47 files', 'created 3 folders')"
+      - "Shows workflow progression (e.g., 'completed setup, now organizing')"
+      - "Mentions prior results (e.g., 'previous search returned X and Y')"
+      - "Length: 80-150 characters with specifics"
+      - "Never empty, never generic placeholders"
+
+    toolContext:
+      - "Explains position in workflow (e.g., 'after confirming targets, now executing move')"
+      - "References workflow logic (e.g., 'using append to preserve existing entries')"
+      - "Shows strategic reasoning (e.g., 'batch operation more efficient than 8 individual moves')"
+      - "Length: 60-120 characters"
+      - "MUST be STRING type"
+
+    goals:
+      primaryGoal: "Remains consistent across operation sequence"
+      subgoal: "Shows clear progression (search → verify → act → confirm)"
+      decomposition: "Parent goal broken into logical steps"
+
+  tool_patterns:
+    workflow_sequences:
+      - "Search → Read → Update (logical progression)"
+      - "List → Filter → Batch operation"
+      - "Load workspace → Use workspace data → Update workspace"
+
+    context_references:
+      - "Uses results from prior tool as parameters for next"
+      - "Mentions prior tool calls in sessionMemory"
+      - "Builds on previous operations"
+
+  parameter_patterns:
+    - "Parameters derived from prior results (not hardcoded)"
+    - "Paths verified through earlier search"
+    - "Limits adjusted based on prior result counts"
+    - "Filters informed by previous exploration"
+
+negative_indicators:
+  context_patterns:
+    sessionMemory:
+      - "Empty: '' or []"
+      - "Generic placeholders: 'User context', 'Previous session', 'Working on task'"
+      - "Too short: < 50 characters"
+      - "No specifics: 'User working on project' (which project? what phase?)"
+      - "No numbers or concrete details"
+
+    toolContext:
+      - "Just restates action: 'Appending content', 'Moving file'"
+      - "Object instead of string: SCHEMA VIOLATION"
+      - "Generic: 'Tool usage context', 'Performing operation'"
+      - "No workflow reasoning"
+      - "Length: < 40 characters"
+
+    goals:
+      - "Identical: primaryGoal == subgoal"
+      - "Too generic: 'Complete user request', 'Help user'"
+      - "No decomposition: subgoal doesn't show current step"
+
+  tool_patterns:
+    antipatterns:
+      - "Each operation seems isolated (no workflow continuity)"
+      - "Doesn't reference prior tool calls"
+      - "Repeats searches unnecessarily"
+      - "Ignores information already obtained"
+
+  parameter_patterns:
+    - "Same generic parameters every time"
+    - "Doesn't adapt based on prior results"
+    - "Hardcoded values when dynamic available"
+
+trigger_scenarios:
+  - type: multi_step_operations
+    examples:
+      - "Search → Read → Update workflow"
+      - "Create → Populate → Organize sequence"
+      - "Load → Process → Save pipeline"
+
+  - type: continuation_tasks
+    examples:
+      - "Now organize those files"
+      - "Continue with the next step"
+      - "Update the files we just found"
+
+  - type: batch_operations
+    examples:
+      - "Process all the research papers"
+      - "Update multiple files"
+      - "Organize these folders"
+
+  - type: workflow_based_tasks
+    examples:
+      - "Follow the project setup workflow"
+      - "Complete the monthly review process"
+      - "Execute the backup procedure"
+
+example_user_requests:
+  - "Now organize those files by topic"
+  - "Update the files we found with the new format"
+  - "Continue setting up the project structure"
+  - "Process all the papers we identified earlier"
+  - "Move the files to the new location"
+
+metrics:
+  sessionMemory_quality:
+    description: "Average length and specificity score"
+    target: "80+ chars, 4-5/5 quality"
+    measurement: "Manual review of sessionMemory richness"
+
+  toolContext_quality:
+    description: "Percentage that explain WHY vs just WHAT"
+    target: ">90%"
+    measurement: "Count (WHY reasoning present) / total examples"
+
+  goal_coherence:
+    description: "Percentage with clear primaryGoal → subgoal decomposition"
+    target: ">85%"
+    measurement: "Count (clear decomposition) / total examples"
+
+  workflow_continuity:
+    description: "Percentage that reference prior actions"
+    target: ">70%"
+    measurement: "Count (prior action references in sessionMemory) / multi-step operations"
+
+target_volume:
+  pairs: 100-200
+  total_examples: 200-400
+  quality_threshold: "4-5/5 average quality score"
+
+notes: |
+  Context continuity is essential for multi-step operations and maintaining state
+  across tool calls. Without rich context, the model loses track of what it's doing
+  and why, leading to disconnected operations and poor user experience.
+
+  Common failure mode: Each operation is isolated with no memory of prior work.
+  Desired behavior: Each operation builds on previous ones with clear continuity.

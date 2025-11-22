@@ -1,0 +1,175 @@
+# Error Recovery & Adaptation Behavior Rubric
+# Model handles failures gracefully and tries alternative approaches
+
+behavior_name: error_recovery
+category: resilience
+priority: medium
+version: 1.0
+
+description: |
+  Model demonstrates error recovery and adaptation by:
+  - Acknowledging failures in context (not ignoring errors)
+  - Trying alternative approaches after failure
+  - Adjusting parameters based on error messages
+  - Escalating to stronger models after repeated failures
+  - Learning from errors (not repeating identical failed attempts)
+
+positive_indicators:
+  context_patterns:
+    sessionMemory:
+      - "Acknowledges prior failures: 'Previous direct access failed (not found), now searching'"
+      - "Explains adaptation: 'Replace failed due to content mismatch, reading full content first'"
+      - "Shows learning: 'First attempt with exact match failed, trying case-insensitive'"
+      - "Notes error context: 'Workspace load failed, trying alternative workspaceId'"
+
+    toolContext:
+      - "Explains change in approach: 'Using search after direct read failed'"
+      - "Shows reasoning: 'Trying case-insensitive search since exact match returned nothing'"
+      - "Mentions escalation: 'Automated approach failed twice, escalating to executePrompt'"
+      - "References prior attempt: 'After deletion failed, verifying path exists first'"
+
+  tool_patterns:
+    fallback_sequences:
+      - "Direct access fails → Search for item"
+      - "Exact match fails → Fuzzy/pattern matching"
+      - "Automated solution fails 2x → executePrompt escalation"
+      - "File not found → searchDirectory to explore actual structure"
+      - "Replace fails → Read current content, find exact string"
+
+    alternative_approaches:
+      - "Change search parameters (case-sensitive → insensitive)"
+      - "Broaden scope (specific folder → vault-wide)"
+      - "Switch tool families (vaultManager → vaultLibrarian)"
+      - "Adjust matching (exact → similarityThreshold)"
+      - "Different search type (searchContent → searchDirectory)"
+
+  parameter_patterns:
+    adapted_parameters:
+      - "caseSensitive: false after case-sensitive failed"
+      - "wholeWord: false after whole-word match failed"
+      - "limit: increased after initial results insufficient"
+      - "similarityThreshold: 0.8 for fuzzy matching"
+      - "depth: increased for deeper exploration"
+
+    error_informed:
+      - "Parameters adjusted based on error message"
+      - "Includes context about what was already tried"
+      - "Uses includeContent: true to understand why prior match failed"
+
+negative_indicators:
+  tool_patterns:
+    antipatterns:
+      - "Repeats identical failed operation"
+      - "No change in parameters after failure"
+      - "Gives up after single failure"
+      - "No acknowledgment of error in context"
+      - "Doesn't try alternative tools"
+      - "Ignores error messages"
+
+  context_patterns:
+    sessionMemory:
+      - "Omits prior failures"
+      - "Doesn't explain why new approach differs"
+      - "No learning from errors"
+      - "Proceeds as if no error occurred"
+
+    toolContext:
+      - "Doesn't acknowledge this is a retry"
+      - "No explanation of adaptation"
+      - "Same reasoning as failed attempt"
+
+  parameter_patterns:
+    - "Identical parameters to failed attempt"
+    - "No adaptation based on error"
+    - "Ignores hints from error messages"
+
+trigger_scenarios:
+  - type: file_not_found_errors
+    error: "File does not exist"
+    recovery:
+      - "searchContent to find actual location"
+      - "searchDirectory to explore structure"
+      - "List parent directory"
+
+  - type: content_mismatch_errors
+    error: "oldContent not found in file"
+    recovery:
+      - "readContent to see actual content"
+      - "Adjust oldContent string"
+      - "Use similarityThreshold"
+
+  - type: permission_errors
+    error: "Access denied"
+    recovery:
+      - "Check workspace permissions"
+      - "Try alternative path"
+      - "Escalate to user"
+
+  - type: search_no_results
+    error: "No matches found"
+    recovery:
+      - "Broaden query"
+      - "Change search type"
+      - "Increase limit"
+      - "Try different tool (searchDirectory vs searchContent)"
+
+  - type: validation_errors
+    error: "Invalid parameter"
+    recovery:
+      - "Adjust parameter based on error message"
+      - "Check tool schema"
+      - "Use alternative parameter"
+
+example_user_requests:
+  - "Find the authentication module" (after initial search fails)
+  - "Update the database config" (after replace fails due to content mismatch)
+  - "Delete the old logs folder" (after path not found)
+  - "Move my notes to Projects" (after destination doesn't exist)
+  - "Search for todo items" (after exact match returns nothing)
+
+metrics:
+  recovery_rate:
+    description: "Percentage of failures followed by successful alternative"
+    target: ">75%"
+    measurement: "Count (failure → success) / total failures"
+
+  repetition_rate:
+    description: "Percentage of failures repeated identically"
+    target: "<5%"
+    measurement: "Count (identical retries) / total retries"
+
+  escalation_appropriateness:
+    description: "Percentage of 2+ failures escalating to executePrompt"
+    target: ">60%"
+    measurement: "Count (2+ fails → escalate) / sequences with 2+ fails"
+
+  adaptation_quality:
+    description: "Quality of parameter adjustments after failure"
+    target: ">80% meaningful adaptations"
+    measurement: "Manual review of retry attempts"
+
+target_volume:
+  pairs: 80-150
+  total_examples: 160-300
+  quality_threshold: "4-5/5 average quality score"
+
+notes: |
+  Error recovery is essential for robust tool use. Models must learn to handle
+  failures gracefully rather than giving up or repeating failed approaches.
+
+  Key principles:
+  1. Acknowledge failures explicitly in context
+  2. Analyze error message for hints
+  3. Try meaningful alternatives (not random changes)
+  4. Escalate after 2-3 failed attempts
+  5. Never repeat identical failed operation
+
+  Recovery strategies by error type:
+  - Not found → Search/explore
+  - Content mismatch → Read and adjust
+  - No results → Broaden/change approach
+  - Permission → Alternative path or escalate
+  - Validation → Fix parameters based on message
+
+  Common failure mode: Repeating same operation or giving up immediately.
+  Desired behavior: Thoughtful adaptation and alternative approaches.
