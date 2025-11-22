@@ -1,0 +1,163 @@
+# Strategic Tool Selection Behavior Rubric
+# Model chooses optimal tools and sequences for efficiency
+
+behavior_name: strategic_tool_selection
+category: efficiency_and_planning
+priority: medium
+version: 1.0
+
+description: |
+  Model demonstrates strategic tool selection by:
+  - Preferring batch operations over multiple individual calls
+  - Choosing appropriate search scope (content vs directory vs memory)
+  - Avoiding unnecessary intermediate steps
+  - Using efficient tool sequences
+  - Optimizing parameter usage (includeContent, limits, filters)
+
+positive_indicators:
+  tool_patterns:
+    batch_over_iteration:
+      - "vaultLibrarian_batch for multiple related searches (not 5x searchContent)"
+      - "contentManager_batchContent for multiple file operations"
+      - "agentManager_batchExecutePrompt for multiple prompts"
+
+    appropriate_scope:
+      - "searchContent for content matching (not searchDirectory + manual filter)"
+      - "searchDirectory for file/folder structure (not searchContent)"
+      - "searchMemory for prior session data (not re-searching files)"
+      - "loadWorkspace for workspace data (not searching individual files)"
+
+    efficient_sequences:
+      - "Single targeted search (not multiple vague searches)"
+      - "Direct read of known file (not search → list → read)"
+      - "Batch operations consolidating related actions"
+
+    parameter_optimization:
+      - "includeContent: true only when content needed"
+      - "includeContent: false when just verifying existence"
+      - "Appropriate limit values (not always default)"
+      - "folder/paths parameters to narrow scope"
+      - "fileTypes filters when applicable"
+
+  context_patterns:
+    sessionMemory:
+      - "Shows planning: 'Need to search 3 topics, using batch operation'"
+      - "Notes efficiency: 'Batch operation covers all requirements at once'"
+
+    toolContext:
+      - "Explains efficiency reasoning: 'Batch search more efficient than 5 individual calls'"
+      - "Mentions optimization: 'Using searchDirectory instead of searchContent for file listing'"
+      - "Shows strategic choice: 'Single query with OR logic covers all cases'"
+
+  parameter_patterns:
+    batch_operations:
+      - "searches array groups related queries"
+      - "operations array consolidates file operations"
+      - "prompts array for multiple LLM calls"
+      - "mergeResults: true when consolidated output needed"
+
+    search_optimization:
+      - "folder parameter narrows scope"
+      - "fileTypes filters by extension"
+      - "limit adjusted based on expected results"
+      - "includeContent based on downstream need"
+
+negative_indicators:
+  tool_patterns:
+    antipatterns:
+      - "Multiple individual searches instead of single batch"
+      - "Using searchContent when searchDirectory appropriate (or vice versa)"
+      - "Unnecessary intermediate steps"
+      - "Re-searching for information already obtained"
+      - "Using includeContent: true then not using content"
+      - "Reading files one-by-one instead of batch"
+
+  context_patterns:
+    sessionMemory:
+      - "No mention of efficiency considerations"
+      - "Doesn't acknowledge batch alternatives"
+      - "No planning for optimization"
+
+    toolContext:
+      - "No explanation of why this tool chosen"
+      - "Doesn't mention efficiency"
+      - "Generic tool justification"
+
+  parameter_patterns:
+    - "Always using default parameters"
+    - "includeContent: true unnecessarily (wastes tokens)"
+    - "No folder/path scoping when available"
+    - "limit: 1000 when only need 10"
+    - "No fileTypes filter when searching specific types"
+
+trigger_scenarios:
+  - type: multiple_related_searches
+    examples:
+      - "Search for X, Y, and Z"
+      - "Find all files matching several patterns"
+      - "Look for multiple topics"
+
+  - type: multiple_file_operations
+    examples:
+      - "Update 5 different files"
+      - "Read several config files"
+      - "Create multiple related notes"
+
+  - type: large_scale_operations
+    examples:
+      - "Process all research papers"
+      - "Organize entire folder structure"
+      - "Update all meeting notes"
+
+  - type: scope_dependent_search
+    examples:
+      - "List all markdown files" (use searchDirectory, not searchContent)
+      - "Find files containing 'API'" (use searchContent, not searchDirectory)
+      - "Check previous sessions" (use searchMemory, not searchContent)
+
+example_user_requests:
+  - "Search for references to authentication, authorization, and tokens in my codebase"
+  - "Update the API endpoint in all my config files"
+  - "List all the folders in my Projects directory"
+  - "Find which previous sessions dealt with the budget project"
+  - "Read the content of all my meeting notes from last week"
+
+metrics:
+  batch_usage_rate:
+    description: "Percentage of multi-operation tasks using batch tools"
+    target: ">70%"
+    measurement: "Count (batch used for multi-op) / total multi-operation tasks"
+
+  search_efficiency:
+    description: "Average queries per task"
+    target: "Minimize queries while maintaining accuracy"
+    measurement: "Total search queries / total search tasks"
+
+  unnecessary_steps:
+    description: "Percentage of operations with redundant tool calls"
+    target: "<10%"
+    measurement: "Count (redundant operations) / total operations"
+
+  parameter_optimization:
+    description: "Appropriate use of includeContent, limits, filters"
+    target: ">85%"
+    measurement: "Manual review of parameter choices"
+
+target_volume:
+  pairs: 80-150
+  total_examples: 160-300
+  quality_threshold: "4-5/5 average quality score"
+
+notes: |
+  This behavior teaches efficiency and strategic thinking in tool selection.
+  While less critical than safety behaviors, it significantly improves performance
+  and reduces token usage.
+
+  Key principles:
+  1. Batch when possible (reduces API calls and latency)
+  2. Choose right tool for task (searchContent vs searchDirectory)
+  3. Optimize parameters (don't fetch unused data)
+  4. Minimize redundant operations
+
+  Common failure mode: Inefficient sequences with unnecessary steps.
+  Desired behavior: Strategic, optimized tool selection and usage.
