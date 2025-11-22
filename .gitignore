@@ -105,3 +105,11 @@ Datasets/quality_review/IMPROVEMENT_COMPLETION.txt
 Datasets/quality_review/improvement_report_batch_*.md
 tools/auto_improve_mechanical.py
 tools/improve_batch_template.py
+
+# Temporary validation fix artifacts
+Datasets/quality_review/improved_interleaved.jsonl.corrupted
+Datasets/quality_review/improved_interleaved.jsonl.partial_fix
+tools/fix_corrupted_from_originals.py
+tools/fix_corrupted_tool_calls.py
+tools/fix_validation_failures.py
+tools/replace_remaining_failures.py
