@@ -66,65 +66,19 @@ python train_sft.py --model-size 7b --dry-run
 
 ## Chaining SFT → KTO
 
-### Automated Pipeline (Recommended)
+The interactive CLI (see Quick Start above) handles this automatically. When you choose **option 3 (SFT → KTO Pipeline)**, it will:
 
-**Linux/WSL2:**
-```bash
-# From Trainers/ directory
-cd ..
-./train_sft_to_kto_pipeline.sh --wandb --wandb-project my-project
-```
+1. Run SFT training with `configs/config.yaml`
+2. Capture SFT output path automatically
+3. Update KTO config to use SFT model as base
+4. Run KTO refinement
+5. Produce final refined model
 
-**Windows PowerShell:**
-```powershell
-# From Trainers\ directory
-cd ..
-.\train_sft_to_kto_pipeline.ps1
-```
-
-**What it does:**
-1. Finds Python from unsloth_env automatically
-2. Runs SFT training with `configs/config.yaml`
-3. Captures SFT output path
-4. Updates KTO config to use SFT model as base
-5. Runs KTO refinement automatically
-6. Produces final refined model
-
-**Configuration:**
-- Edit `configs/config.yaml` to customize SFT settings
-- Edit `../rtx3090_kto/configs/config.yaml` for KTO settings
-- Pipeline uses YAML configs (no CLI overrides needed)
-
-### Manual Chaining
-
-If you prefer step-by-step control:
-
-**Linux/WSL2:**
-```bash
-# Step 1: Train SFT
-./train.sh --model-size 7b
-
-# Note the output path (e.g., sft_output_rtx3090/20251123_143000/)
-
-# Step 2: Train KTO with SFT output
-cd ../rtx3090_kto
-python train_kto.py --model-size 7b \
-  --model-name ../rtx3090_sft/sft_output_rtx3090/20251123_143000/final_model
-```
-
-**Windows PowerShell:**
-```powershell
-# Step 1: Run SFT
-cd Trainers\rtx3090_sft
-.\train.ps1
-
-# Note the output path from console
-
-# Step 2: Run KTO with SFT output
-cd ..\rtx3090_kto
-python train_kto.py --model-size 7b `
-  --model-name "..\rtx3090_sft\sft_output_rtx3090\20251123_143000\final_model"
-```
+**To customize settings:**
+- Edit `configs/config.yaml` for SFT configuration
+- Edit `../rtx3090_kto/configs/config.yaml` for KTO configuration
+- Run `./train.sh` (Linux) or `.\train.ps1` (Windows) from `Trainers/` directory
+- Choose option 3 and follow prompts
 
 ## Model Sizes
 
