@@ -83,7 +83,7 @@ echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo "Phase 2: KTO Training (Preference Learning Refinement)"
 echo "═══════════════════════════════════════════════════════════════"
-echo "  Config: configs/config.yaml (will be temporarily modified)"
+echo "  Config: configs/config.yaml (will be updated with SFT model path)"
 echo "  Base model: $SFT_FINAL_MODEL (SFT output)"
 echo "  Dataset: syngen_tools_11.18.25.jsonl (from YAML)"
 echo "  Learning rate: 2e-7 (from YAML)"
@@ -93,16 +93,10 @@ read -p "Press Enter to start KTO refinement or Ctrl+C to skip..."
 
 cd ../rtx3090_kto
 
-# Backup original KTO config
-KTO_CONFIG="configs/config.yaml"
-KTO_CONFIG_BACKUP="configs/config.yaml.backup"
-cp "$KTO_CONFIG" "$KTO_CONFIG_BACKUP"
-
 # Get the absolute path to SFT final model
 SFT_FINAL_MODEL_ABS="$(cd ../../Trainers/rtx3090_sft && realpath "$SFT_FINAL_MODEL")"
 
 echo "  Updating KTO config to use SFT output model..."
-echo "  Original model_name: $(grep 'model_name:' "$KTO_CONFIG" | head -1)"
 echo "  New model_name: $SFT_FINAL_MODEL_ABS"
 
 # Update the model_name in KTO config using Python (handles YAML formatting)
@@ -110,7 +104,7 @@ python3 - <<EOF
 import yaml
 from pathlib import Path
 
-config_path = Path("$KTO_CONFIG")
+config_path = Path("configs/config.yaml")
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
@@ -130,12 +124,6 @@ echo "  Running KTO training with updated config..."
 # Run KTO with modified YAML config (no CLI overrides needed)
 python train_kto.py $WANDB_FLAG $WANDB_PROJECT
 
-# Restore original KTO config
-echo ""
-echo "  Restoring original KTO config..."
-mv "$KTO_CONFIG_BACKUP" "$KTO_CONFIG"
-echo "  ✓ Config restored"
-
 # Find the most recent KTO output directory
 KTO_OUTPUT=$(ls -td kto_output_rtx3090/*/ | head -1)
 
@@ -150,7 +138,7 @@ echo "  KTO Output:  $KTO_OUTPUT"
 echo ""
 echo "Configuration Files:"
 echo "  SFT used: Trainers/rtx3090_sft/configs/config.yaml"
-echo "  KTO used: Trainers/rtx3090_kto/configs/config.yaml (restored)"
+echo "  KTO used: Trainers/rtx3090_kto/configs/config.yaml (updated with SFT model path)"
 echo ""
 echo "Next Steps:"
 echo "  1. Test the model:"
